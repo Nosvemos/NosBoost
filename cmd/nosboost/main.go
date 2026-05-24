@@ -22,19 +22,19 @@ func isAdmin() bool {
 
 func main() {
 	fmt.Println("==================================================")
-	fmt.Println("🚀 NosBoost Engine - Administrative Launcher")
+	fmt.Println("NosBoost Engine - Administrative Launcher")
 	fmt.Println("==================================================")
 
 	// Pre-populate UI console channel with bootstrap logs
 	gui.UIConsoleChan <- "[SYSTEM] Bootstrapping NosBoost engine services..."
 
 	if !isAdmin() {
-		fmt.Println("⚠️  WARNING: NosBoost is NOT running with Administrative privileges!")
+		fmt.Println("WARNING: NosBoost is NOT running with Administrative privileges!")
 		gui.UIConsoleChan <- "[CRITICAL WARNING] NosBoost was launched WITHOUT Administrative privileges!"
 		gui.UIConsoleChan <- "[CRITICAL WARNING] Kernel adjustments (Registry, Services, MSI, network routing)"
 		gui.UIConsoleChan <- "[CRITICAL WARNING] require elevated authority. Please relaunch NosBoost as Administrator."
 	} else {
-		fmt.Println("✅ Elevated privileges detected. Running with full system authority.")
+		fmt.Println("Elevated privileges detected. Running with full system authority.")
 		gui.UIConsoleChan <- "[SYSTEM] Administrative authority verified."
 
 		// Guard: Capture baseline state ONLY if it doesn't already exist.

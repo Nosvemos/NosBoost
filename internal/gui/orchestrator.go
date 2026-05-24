@@ -38,6 +38,7 @@ var (
 	// Active game detection list
 	TargetGames = []string{
 		"cs2.exe",
+		"csgo.exe",
 		"VALORANT-Win64-Shipping.exe",
 		"League of Legends.exe",
 		"LeagueClient.exe",
@@ -45,6 +46,12 @@ var (
 		"r5apex.exe",
 		"FortniteClient-Win64-Shipping.exe",
 		"Overwatch.exe",
+		"TslGame.exe",
+		"RainbowSix.exe",
+		"RustClient.exe",
+		"EldenRing.exe",
+		"cod.exe",
+		"Minecraft.exe",
 		"GTA5.exe",
 		"Cyberpunk2077.exe",
 	}
@@ -165,6 +172,15 @@ func ApplyExtremeMode() {
 	}
 
 	if GetCurrentMode() != "Extreme" { return }
+	logToUI("[NETWORK] Optimizing network adapters LSO/RSC/RSS/DCA packet parameters...")
+	if err := network.OptimizeNetworkInterfaceSettings(); err == nil {
+		logToUI("[NETWORK] Network adapter packet loss and drops protection active.")
+	} else {
+		logToUI(fmt.Sprintf("[WARNING] Network adapter optimizations failed: %v", err))
+	}
+
+
+	if GetCurrentMode() != "Extreme" { return }
 	logToUI("[NETWORK] Loading esports regional servers and injecting static route bypasses...")
 	if routes, err := network.InjectGameRoutes(); err == nil {
 		injectedRoutes = routes
@@ -189,6 +205,15 @@ func ApplyExtremeMode() {
 	} else {
 		logToUI(fmt.Sprintf("[WARNING] Peripheral buffers optimization failed: %v", err))
 	}
+
+	if GetCurrentMode() != "Extreme" { return }
+	logToUI("[HARDWARE] Injecting input responsive and Game DVR tweaks...")
+	if err := hardware.OptimizeInputLatency(); err == nil {
+		logToUI("[HARDWARE] 1:1 Raw input and Game DVR latency eliminated.")
+	} else {
+		logToUI(fmt.Sprintf("[WARNING] Input latency adjustments failed: %v", err))
+	}
+
 
 	if GetCurrentMode() != "Extreme" { return }
 	logToUI("[HARDWARE] Invariant platform clocks configuration check...")
@@ -292,6 +317,8 @@ func ApplyBalancedMode() {
 	if GetCurrentMode() != "Balanced" { return }
 	logToUI("[NETWORK] Injecting low-latency TCP NoDelay registry parameters...")
 	_ = network.InjectTCPNoDelay()
+	_ = network.OptimizeNetworkInterfaceSettings()
+
 
 	if GetCurrentMode() != "Balanced" { return }
 	logToUI("[NETWORK] Loading esports regional servers and injecting static route bypasses...")
@@ -308,6 +335,8 @@ func ApplyBalancedMode() {
 	if GetCurrentMode() != "Balanced" { return }
 	logToUI("[HARDWARE] Optimizing peripheral input report buffer queues...")
 	_ = hardware.TunePeripheralBuffers()
+	_ = hardware.OptimizeInputLatency()
+
 
 	if GetCurrentMode() != "Balanced" { return }
 	logToUI("[HARDWARE] Invariant platform clocks configuration check...")
@@ -373,6 +402,15 @@ func ApplyTotalRestore() {
 		injectedRoutes = nil
 	}
 
+	// 2b. Revert network LSO/RSC/RSS/DCA settings
+	logToUI("[RESTORE] Reverting network adapter LSO, RSC, and TCP settings to default...")
+	if err := network.RestoreNetworkInterfaceSettings(); err == nil {
+		logToUI("[RESTORE] Network adapter settings reverted to OS defaults.")
+	} else {
+		logToUI(fmt.Sprintf("[WARNING] Network stack rollback encountered errors: %v", err))
+	}
+
+
 	// 3. Revert MSI modes
 	logToUI("[RESTORE] Restoring Message Signaled Interrupts (MSI) to default state...")
 	if err := hardware.DisableMSIMode(); err == nil {
@@ -413,6 +451,12 @@ func ApplyTotalRestore() {
 	} else {
 		logToUI(fmt.Sprintf("[WARNING] Peripheral buffers restoration failed: %v", err))
 	}
+	if err := hardware.RestoreInputLatency(); err == nil {
+		logToUI("[RESTORE] Input latency and Game DVR settings rolled back.")
+	} else {
+		logToUI(fmt.Sprintf("[WARNING] Input latency rollback failed: %v", err))
+	}
+
 
 	// 7. Resume background frozen services
 	if servicesFrozen {

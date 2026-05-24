@@ -61,5 +61,19 @@ type SystemBaselineState struct {
 	MouseQueueValue              uint32               `json:"mouse_queue_value"`
 	KeyboardQueueExist           bool                 `json:"keyboard_queue_exist"`
 	KeyboardQueueValue           uint32               `json:"keyboard_queue_value"`
+	MouseSpeedExists             bool                 `json:"mouse_speed_exists"`
+	MouseSpeedValue              string               `json:"mouse_speed_value"`
+	MouseThreshold1Exists        bool                 `json:"mouse_threshold1_exists"`
+	MouseThreshold1Value         string               `json:"mouse_threshold1_value"`
+	MouseThreshold2Exists        bool                 `json:"mouse_threshold2_exists"`
+	MouseThreshold2Value         string               `json:"mouse_threshold2_value"`
+	KeyboardDelayExists          bool                 `json:"keyboard_delay_exists"`
+	KeyboardDelayValue           string               `json:"keyboard_delay_value"`
+	KeyboardSpeedExists          bool                 `json:"keyboard_speed_exists"`
+	KeyboardSpeedValue           string               `json:"keyboard_speed_value"`
+	GameDVREnabledExists         bool                 `json:"gamedvr_enabled_exists"`
+	GameDVREnabledValue          uint32               `json:"gamedvr_enabled_value"`
+	AppCaptureEnabledExists      bool                 `json:"app_capture_enabled_exists"`
+	AppCaptureEnabledValue       uint32               `json:"app_capture_enabled_value"`
 }
 const BackupFileName = "state_backup.json"

@@ -234,6 +234,53 @@ func SaveBaselineState() (*SystemBaselineState, error) {
 		kKey.Close()
 	}
 
+	// 5d. BACK UP MOUSE SPEED AND ACCELERATION
+	if key, err := registry.OpenKey(registry.CURRENT_USER, `Control Panel\Mouse`, registry.QUERY_VALUE); err == nil {
+		if val, _, err := key.GetStringValue("MouseSpeed"); err == nil {
+			baseline.MouseSpeedExists = true
+			baseline.MouseSpeedValue = val
+		}
+		if val, _, err := key.GetStringValue("MouseThreshold1"); err == nil {
+			baseline.MouseThreshold1Exists = true
+			baseline.MouseThreshold1Value = val
+		}
+		if val, _, err := key.GetStringValue("MouseThreshold2"); err == nil {
+			baseline.MouseThreshold2Exists = true
+			baseline.MouseThreshold2Value = val
+		}
+		key.Close()
+	}
+
+	// 5e. BACK UP KEYBOARD DELAY AND SPEED
+	if key, err := registry.OpenKey(registry.CURRENT_USER, `Control Panel\Keyboard`, registry.QUERY_VALUE); err == nil {
+		if val, _, err := key.GetStringValue("KeyboardDelay"); err == nil {
+			baseline.KeyboardDelayExists = true
+			baseline.KeyboardDelayValue = val
+		}
+		if val, _, err := key.GetStringValue("KeyboardSpeed"); err == nil {
+			baseline.KeyboardSpeedExists = true
+			baseline.KeyboardSpeedValue = val
+		}
+		key.Close()
+	}
+
+	// 5f. BACK UP GAMEDVR CONFIG
+	if key, err := registry.OpenKey(registry.CURRENT_USER, `System\GameConfigStore`, registry.QUERY_VALUE); err == nil {
+		if val, _, err := key.GetIntegerValue("GameDVR_Enabled"); err == nil {
+			baseline.GameDVREnabledExists = true
+			baseline.GameDVREnabledValue = uint32(val)
+		}
+		key.Close()
+	}
+	if key, err := registry.OpenKey(registry.CURRENT_USER, `SOFTWARE\Microsoft\Windows\CurrentVersion\GameDVR`, registry.QUERY_VALUE); err == nil {
+		if val, _, err := key.GetIntegerValue("AppCaptureEnabled"); err == nil {
+			baseline.AppCaptureEnabledExists = true
+			baseline.AppCaptureEnabledValue = uint32(val)
+		}
+		key.Close()
+	}
+
+
 	// 6. SERIALIZE AND WRITE BASELINE STATE TO FILE
 	data, err := json.MarshalIndent(baseline, "", "  ")
 	if err != nil {
@@ -430,6 +477,49 @@ func RestoreBaselineState() error {
 			_ = kKey.DeleteValue("KeyboardDataQueueSize")
 		}
 		kKey.Close()
+	}
+
+	// 5d. RESTORE MOUSE SPEED AND ACCELERATION
+	if key, err := registry.OpenKey(registry.CURRENT_USER, `Control Panel\Mouse`, registry.SET_VALUE); err == nil {
+		if baseline.MouseSpeedExists {
+			_ = key.SetStringValue("MouseSpeed", baseline.MouseSpeedValue)
+		}
+		if baseline.MouseThreshold1Exists {
+			_ = key.SetStringValue("MouseThreshold1", baseline.MouseThreshold1Value)
+		}
+		if baseline.MouseThreshold2Exists {
+			_ = key.SetStringValue("MouseThreshold2", baseline.MouseThreshold2Value)
+		}
+		key.Close()
+	}
+
+	// 5e. RESTORE KEYBOARD DELAY AND SPEED
+	if key, err := registry.OpenKey(registry.CURRENT_USER, `Control Panel\Keyboard`, registry.SET_VALUE); err == nil {
+		if baseline.KeyboardDelayExists {
+			_ = key.SetStringValue("KeyboardDelay", baseline.KeyboardDelayValue)
+		}
+		if baseline.KeyboardSpeedExists {
+			_ = key.SetStringValue("KeyboardSpeed", baseline.KeyboardSpeedValue)
+		}
+		key.Close()
+	}
+
+	// 5f. RESTORE GAMEDVR CONFIG
+	if key, err := registry.OpenKey(registry.CURRENT_USER, `System\GameConfigStore`, registry.SET_VALUE); err == nil {
+		if baseline.GameDVREnabledExists {
+			_ = key.SetDWordValue("GameDVR_Enabled", baseline.GameDVREnabledValue)
+		} else {
+			_ = key.DeleteValue("GameDVR_Enabled")
+		}
+		key.Close()
+	}
+	if key, err := registry.OpenKey(registry.CURRENT_USER, `SOFTWARE\Microsoft\Windows\CurrentVersion\GameDVR`, registry.SET_VALUE); err == nil {
+		if baseline.AppCaptureEnabledExists {
+			_ = key.SetDWordValue("AppCaptureEnabled", baseline.AppCaptureEnabledValue)
+		} else {
+			_ = key.DeleteValue("AppCaptureEnabled")
+		}
+		key.Close()
 	}
 
 	return nil

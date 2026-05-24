@@ -2,42 +2,21 @@ package gui
 
 import (
 	"fmt"
-	"net"
 	"os"
+	"os/exec"
 	"strings"
-	"time"
-	"unsafe"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
-	"golang.org/x/sys/windows"
-	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/mgr"
 
 	"nosboost/internal/memory"
-)
-
-type memoryStatusEx struct {
-	Length               uint32
-	MemoryLoad           uint32
-	TotalPhys            uint64
-	AvailPhys            uint64
-	TotalPageFile        uint64
-	AvailPageFile        uint64
-	TotalVirtual         uint64
-	AvailVirtual         uint64
-	AvailExtendedVirtual uint64
-}
-
-var (
-	kernel32               = windows.NewLazySystemDLL("kernel32.dll")
-	procGlobalMemoryStatus = kernel32.NewProc("GlobalMemoryStatusEx")
+	"nosboost/internal/syswatch"
 )
 
 // ShowDashboard bootstraps and renders the overhauled premium Fyne native command center.
@@ -47,11 +26,9 @@ func ShowDashboard() {
 
 	myApp := app.New()
 	myWindow := myApp.NewWindow("NosBoost Command Center // Active Performance Matrix")
-	myWindow.Resize(fyne.NewSize(1000, 720))
-	myWindow.SetFixedSize(true)
 
-	// 2. Setup Cyberpunk Header Panel with Glowing Accent Lines
-	titleLabel := canvas.NewText("🚀 NOSBOOST COMMAND CENTER", theme.PrimaryColor())
+	// 2. Setup Header Panel
+	titleLabel := canvas.NewText("NOSBOOST COMMAND CENTER", theme.PrimaryColor())
 	titleLabel.TextSize = 22
 	titleLabel.TextStyle = fyne.TextStyle{Bold: true}
 	titleLabel.Alignment = fyne.TextAlignCenter
@@ -63,20 +40,17 @@ func ShowDashboard() {
 	headerContainer := container.NewVBox(
 		titleLabel,
 		subtitleLabel,
-		canvas.NewLine(theme.PrimaryColor()),
+		widget.NewSeparator(),
 	)
 
 	// 3. LEFT POWER COLUMN: ADVANCED TELEMETRY ENGINE MONITOR
 	// Card 1: Physical Memory segmented breakdown display
-	ramAllocLabel := widget.NewLabel("Allocated: Querying...")
+	ramAllocLabel := widget.NewLabel("Allocated RAM: Querying...")
 	ramAllocLabel.TextStyle = fyne.TextStyle{Bold: true, Monospace: true}
-	ramCacheLabel := widget.NewLabel("Cached: Querying...")
-	ramCacheLabel.TextStyle = fyne.TextStyle{Monospace: true}
-	ramFreeLabel := widget.NewLabel("Available: Querying...")
-	ramFreeLabel.TextStyle = fyne.TextStyle{Monospace: true}
+	ramAllocLabel.Wrapping = fyne.TextWrapWord
 
 	memProgress := widget.NewProgressBar()
-	cleanMemBtn := widget.NewButtonWithIcon("🧹 CLEAN MEMORY STANDBY LIST", theme.ContentClearIcon(), func() {
+	cleanMemBtn := widget.NewButtonWithIcon("CLEAN MEMORY", theme.ContentClearIcon(), func() {
 		go func() {
 			logToUI("[MEMORY] Initiating background RAM standby cache cleaning sweep...")
 			if err := memory.PurgeStandbyList(); err != nil {
@@ -85,76 +59,112 @@ func ShowDashboard() {
 			if err := memory.FlushModifiedList(); err != nil {
 				logToUI(fmt.Sprintf("[WARNING] FlushModifiedList error: %v", err))
 			}
-			logToUI("[MEMORY] STANDBY RAM and modified page caches flushed successfully.")
+			logToUI("[MEMORY] Standby and modified RAM caches flushed successfully.")
 		}()
 	})
 	cleanMemBtn.Importance = widget.WarningImportance
 
-	memCard := widget.NewCard("🧠 PHYSICAL MEMORY HEALTH", "", container.NewVBox(
+	memCard := widget.NewCard("PHYSICAL MEMORY HEALTH", "", container.NewVBox(
 		ramAllocLabel,
-		ramCacheLabel,
-		ramFreeLabel,
 		memProgress,
 		cleanMemBtn,
 	))
 
-	// Card 2: Stylized Regional Ping Connection Grid (Interactive Nodes)
-	pingUSALabel := widget.NewLabel("NA East Gateway: Standing by")
-	pingUSAWestLabel := widget.NewLabel("NA West Gateway: Standing by")
-	pingEULabel := widget.NewLabel("Europe Gateway: Standing by")
-	pingAsiaLabel := widget.NewLabel("Asia Gateway: Standing by")
+	// Card 2: Network Stabilization Status Elements (Dynamic status dashboard)
+	netStatusLabel := widget.NewLabel("Network Latency Engine: Querying...")
+	netStatusLabel.TextStyle = fyne.TextStyle{Monospace: true}
+	netStatusLabel.Wrapping = fyne.TextWrapWord
 
-	usEastGateway := "dynamodb.us-east-1.amazonaws.com:443"
-	usWestGateway := "dynamodb.us-west-2.amazonaws.com:443"
-	euGateway := "dynamodb.eu-central-1.amazonaws.com:443"
-	asiaGateway := "dynamodb.ap-northeast-1.amazonaws.com:443"
+	packetShieldLabel := widget.NewLabel("Packet Loss Shield: Querying...")
+	packetShieldLabel.TextStyle = fyne.TextStyle{Monospace: true}
+	packetShieldLabel.Wrapping = fyne.TextWrapWord
 
-	pingUSABtn := widget.NewButton("🔄 Ping NA East", func() {
-		go updatePingTelemetry(pingUSALabel, usEastGateway, "NA East")
+	flushNetworkBtn := widget.NewButtonWithIcon("FLUSH DNS & RESET CONNECTION", theme.ViewRefreshIcon(), func() {
+		go func() {
+			logToUI("[NETWORK] Flushing DNS Resolver Cache...")
+			if err := exec.Command("ipconfig", "/flushdns").Run(); err != nil {
+				logToUI(fmt.Sprintf("[WARNING] FlushDNS error: %v", err))
+			} else {
+				logToUI("[NETWORK] DNS Resolver Cache flushed successfully.")
+			}
+			logToUI("[NETWORK] Resetting Winsock TCP/IP stack to clean up packet drops...")
+			if err := exec.Command("netsh", "winsock", "reset").Run(); err != nil {
+				logToUI(fmt.Sprintf("[WARNING] Winsock reset error: %v", err))
+			} else {
+				logToUI("[NETWORK] Winsock TCP/IP stack catalog reset successfully (Reboot recommended).")
+			}
+		}()
 	})
-	pingUSAWestBtn := widget.NewButton("🔄 Ping NA West", func() {
-		go updatePingTelemetry(pingUSAWestLabel, usWestGateway, "NA West")
-	})
-	pingEUBtn := widget.NewButton("🔄 Ping Europe", func() {
-		go updatePingTelemetry(pingEULabel, euGateway, "Europe")
-	})
-	pingAsiaBtn := widget.NewButton("🔄 Ping Asia", func() {
-		go updatePingTelemetry(pingAsiaLabel, asiaGateway, "Asia Pacific")
-	})
+	flushNetworkBtn.Importance = widget.WarningImportance
 
-	netCard := widget.NewCard("🌐 GLOBAL ROUTING CONNECTION MATRIX", "", container.NewVBox(
-		container.NewGridWithColumns(2,
-			container.NewVBox(pingUSALabel, pingUSABtn),
-			container.NewVBox(pingUSAWestLabel, pingUSAWestBtn),
-		),
-		canvas.NewLine(theme.DisabledColor()),
-		container.NewGridWithColumns(2,
-			container.NewVBox(pingEULabel, pingEUBtn),
-			container.NewVBox(pingAsiaLabel, pingAsiaBtn),
-		),
+	netDetailsCard := widget.NewCard("NETWORK PACKET LOSS & LATENCY SHIELD", "", container.NewVBox(
+		netStatusLabel,
+		packetShieldLabel,
+		widget.NewSeparator(),
+		flushNetworkBtn,
 	))
 
 	// Card 3: Kernel Scheduler Status
-	isolationLabel := widget.NewLabel("Thread Isolation: Idle")
-	isolationLabel.TextStyle = fyne.TextStyle{Bold: true}
-	separationLabel := widget.NewLabel("CPU Quantum: Safe Default")
-	timerLabel := widget.NewLabel("Timer Resolution: Default")
-	latencyLabel := widget.NewLabel("⚡ Latency Queue: 1.1ms [STABLE]")
-	latencyLabel.TextStyle = fyne.TextStyle{Bold: true, Italic: true}
+	cpuOptLabel := widget.NewLabel("CPU Optimization: Querying...")
+	cpuOptLabel.Wrapping = fyne.TextWrapWord
+	timerLabel := widget.NewLabel("System Precision Timers: Querying...")
+	timerLabel.Wrapping = fyne.TextWrapWord
+	hagsLabel := widget.NewLabel("Hardware GPU Scheduling (HAGS): Querying...")
+	hagsLabel.Wrapping = fyne.TextWrapWord
+	gameModeLabel := widget.NewLabel("Windows Game Mode: Querying...")
+	gameModeLabel.Wrapping = fyne.TextWrapWord
 
-	kernelCard := widget.NewCard("⚡ KERNEL SCHEDULER & TIMERS", "", container.NewVBox(
-		isolationLabel,
-		separationLabel,
+	kernelCard := widget.NewCard("KERNEL SCHEDULER & TIMERS", "", container.NewVBox(
+		cpuOptLabel,
 		timerLabel,
-		latencyLabel,
+		hagsLabel,
+		gameModeLabel,
+		container.NewGridWithColumns(2,
+			widget.NewButton("Toggle Game Mode", func() {
+				go func() {
+					current, _ := syswatch.GetGameModeState()
+					err := syswatch.SetGameModeState(!current)
+					if err != nil {
+						logToUI(fmt.Sprintf("[ERROR] Failed to toggle Game Mode: %v", err))
+					} else {
+						var stateStr string
+						if !current {
+							stateStr = "ENABLED"
+						} else {
+							stateStr = "DISABLED"
+						}
+						logToUI(fmt.Sprintf("[SYSWATCH] Windows Game Mode toggled to: %s", stateStr))
+						updateSchedulerTelemetry(cpuOptLabel, timerLabel, hagsLabel, gameModeLabel)
+					}
+				}()
+			}),
+			widget.NewButton("Toggle HAGS", func() {
+				go func() {
+					current, _ := syswatch.GetHAGSState()
+					enabled := current != 2
+					err := syswatch.SetHAGSState(enabled)
+					if err != nil {
+						logToUI(fmt.Sprintf("[ERROR] Failed to toggle HAGS: %v", err))
+					} else {
+						var stateStr string
+						if enabled {
+							stateStr = "ENABLED"
+						} else {
+							stateStr = "DISABLED"
+						}
+						logToUI(fmt.Sprintf("[SYSWATCH] GPU Scheduling (HAGS) set to %s (Reboot required).", stateStr))
+						updateSchedulerTelemetry(cpuOptLabel, timerLabel, hagsLabel, gameModeLabel)
+					}
+				}()
+			}),
+		),
 	))
 
 	// Card 4: OS Services checklist & deep verifier
-	srvUpdateLabel := widget.NewLabel("Windows Update: Querying...")
-	srvTelemetryLabel := widget.NewLabel("DiagTrack Telemetry: Querying...")
-	srvSysMainLabel := widget.NewLabel("SysMain Caching: Querying...")
+	srvStatusLabel := widget.NewLabel("Background Diagnostics & Windows Update: Querying...")
+	srvStatusLabel.Wrapping = fyne.TextWrapWord
 
-	deepVerifierBtn := widget.NewButtonWithIcon("🔍 DEEP SERVICE FREEZE VERIFIER", theme.SearchIcon(), func() {
+	deepVerifierBtn := widget.NewButtonWithIcon("Verify Background Services", theme.SearchIcon(), func() {
 		go func() {
 			logToUI("[SYSWATCH] Querying service process parameters...")
 			m, err := mgr.Connect()
@@ -173,38 +183,30 @@ func ShowDashboard() {
 				}
 				status, err := sKey.Query()
 				if err == nil {
-					logToUI(fmt.Sprintf("[SYSWATCH] Service %s -> PID: %d, State: %v", s, status.ProcessId, serviceStateToString(status.State)))
+					logToUI(fmt.Sprintf("[SYSWATCH] Service %s is %s.", s, serviceStateToString(status.State)))
 				}
 				sKey.Close()
 			}
 		}()
 	})
 
-	srvCard := widget.NewCard("🚨 TELEMETRY SERVICE DISCOVERY LEDGER", "", container.NewVBox(
-		srvUpdateLabel,
-		srvTelemetryLabel,
-		srvSysMainLabel,
+	srvCard := widget.NewCard("TELEMETRY SERVICE DISCOVERY LEDGER", "", container.NewVBox(
+		srvStatusLabel,
 		deepVerifierBtn,
 	))
 
-	leftColumnContainer := container.NewVScroll(container.NewVBox(
-		memCard,
-		netCard,
-		kernelCard,
-		srvCard,
-	))
-
 	// 4. RIGHT POWER COLUMN: ONE-CLICK ORCHESTRATION & DYNAMIC HUD
-	// HUD Circle matrix status widget
 	hudModeLabel := widget.NewLabel("MATRIX STATUS: ENGAGED [SAFE BASELINE]")
 	hudModeLabel.TextStyle = fyne.TextStyle{Bold: true}
+	hudModeLabel.Wrapping = fyne.TextWrapWord
 	hudDetailsLabel := widget.NewLabel("Core parking: Active | MSI Mode: Off | TCP Delay: OS Defaults")
 	hudDetailsLabel.TextStyle = fyne.TextStyle{Monospace: true}
+	hudDetailsLabel.Wrapping = fyne.TextWrapWord
 
-	blueprintBtn := widget.NewButtonWithIcon("📋 Query Detailed Engagement Blueprint", theme.InfoIcon(), func() {
+	blueprintBtn := widget.NewButtonWithIcon("Query Detailed Engagement Blueprint", theme.InfoIcon(), func() {
 		go func() {
 			logToUI("==================================================")
-			logToUI("[BLUEPRINT] Current Active Optmization Specifications:")
+			logToUI("[BLUEPRINT] Current Active Optimization Specifications:")
 			logToUI(fmt.Sprintf("[BLUEPRINT] Mode Status: %s", GetCurrentMode()))
 			logToUI("[BLUEPRINT] CPU Cores Lock: 100% Core Parking Elimination Active")
 			logToUI("[BLUEPRINT] CPU Foreground Priority Ratio: short-variable quantum (0x26)")
@@ -215,7 +217,7 @@ func ShowDashboard() {
 		}()
 	})
 
-	hudCard := widget.NewCard("🎮 MATRIX ACTIVE OPTIMIZER STATUS HUD", "", container.NewVBox(
+	hudCard := widget.NewCard("ACTIVE PERFORMANCE MATRIX STATUS HUD", "", container.NewVBox(
 		hudModeLabel,
 		hudDetailsLabel,
 		blueprintBtn,
@@ -223,40 +225,35 @@ func ShowDashboard() {
 
 	// Extreme Card
 	extremeFeatures := widget.NewLabel(
-		"✓ Core Parking Elimination & Locked plan\n" +
-		"✓ TCP NoDelay Socket Registry Overrides\n" +
-		"✓ Message Signaled Interrupts (MSI) conversion\n" +
-		"✓ Background service freeze (DiagTrack/Update)\n" +
-		"✓ Low-Priority disk background I/O throttling\n" +
-		"✓ Dynamic Game Process Cores 2-N Isolation",
+		"Maximizes in-game FPS and eliminates input latency.\n" +
+		"Restricts background system apps, disables power saving,\n" +
+		"freezes telemetry cycles, and isolates gaming processes.",
 	)
-	extremeFeatures.TextStyle = fyne.TextStyle{Monospace: true}
-	extremeCardBtn := widget.NewButtonWithIcon("🔥 ENGAGE EXTREME PERFORMANCE MATRIX", theme.ConfirmIcon(), func() {
+	extremeFeatures.TextStyle = fyne.TextStyle{Italic: true}
+	extremeCardBtn := widget.NewButtonWithIcon("ENGAGE EXTREME PERFORMANCE MATRIX", theme.ConfirmIcon(), func() {
 		logToUI("[UI] User initiated EXTREME mode trigger.")
 		go ApplyExtremeMode()
 	})
 	extremeCardBtn.Importance = widget.HighImportance
 
-	extremeCard := widget.NewCard("🔥 EXTREME COMPETITIVE PROFILE", "", container.NewVBox(
+	extremeCard := widget.NewCard("EXTREME PERFORMANCE PROFILE", "", container.NewVBox(
 		extremeFeatures,
 		extremeCardBtn,
 	))
 
 	// Balanced Card
 	balancedFeatures := widget.NewLabel(
-		"✓ Core Parking Elimination & Power Scheme Locks\n" +
-		"✓ TCP NoDelay registry overrides injected\n" +
-		"✓ Standby cache sweeps & SysMain stopped\n" +
-		"✓ BCDEDIT kernel timers resolution locks\n" +
-		"✗ SKIPS background diagnostics freezing (multitasking ok)",
+		"Improves gaming performance and network responsiveness\n" +
+		"while keeping background services active to permit safe\n" +
+		"multitasking (web browsing, recording, and streaming).",
 	)
-	balancedFeatures.TextStyle = fyne.TextStyle{Monospace: true}
-	balancedCardBtn := widget.NewButtonWithIcon("⚡ ENGAGE BALANCED PERFORMANCE MATRIX", theme.MediaPlayIcon(), func() {
+	balancedFeatures.TextStyle = fyne.TextStyle{Italic: true}
+	balancedCardBtn := widget.NewButtonWithIcon("ENGAGE BALANCED PERFORMANCE MATRIX", theme.MediaPlayIcon(), func() {
 		logToUI("[UI] User initiated BALANCED mode trigger.")
 		go ApplyBalancedMode()
 	})
 
-	balancedCard := widget.NewCard("⚡ BALANCED GAMING PROFILE", "", container.NewVBox(
+	balancedCard := widget.NewCard("BALANCED PERFORMANCE PROFILE", "", container.NewVBox(
 		balancedFeatures,
 		balancedCardBtn,
 	))
@@ -269,14 +266,14 @@ func ShowDashboard() {
 	restoreNormalLayout = container.NewVBox(
 		widget.NewLabel("Wipes injected routing routes, restores display/NIC MSI defaults,"),
 		widget.NewLabel("re-enables SysMain, restores timers, and unfreezes processes."),
-		widget.NewButtonWithIcon("🛡️ INITIATE TOTAL ROLLBACK MATRIX", theme.CancelIcon(), func() {
+		widget.NewButtonWithIcon("INITIATE TOTAL ROLLBACK MATRIX", theme.CancelIcon(), func() {
 			logToUI("[UI] User triggered Total Restore rollback plan evaluation.")
-			
+
 			// Overwrite the card container dynamically to show the rollback breakdown confirmation
 			restoreContainer.Objects = nil
-			
+
 			breakdownLabel := widget.NewLabel(
-				"🚨 SYSTEM ROLLBACK PLAN BREAKDOWN:\n" +
+				"SYSTEM ROLLBACK PLAN BREAKDOWN:\n" +
 				" 1. Revert Core Parking AC/DC indexes\n" +
 				" 2. Revert graphics card/NIC MSI parameters\n" +
 				" 3. Restore mouse/keyboard buffers to 100\n" +
@@ -286,12 +283,12 @@ func ShowDashboard() {
 				" 7. Resume background updater & diagnostic services",
 			)
 			breakdownLabel.TextStyle = fyne.TextStyle{Monospace: true, Bold: true}
-			
-			confirmBtn := widget.NewButtonWithIcon("⚠️ CONFIRM SYSTEM ROLLBACK NOW", theme.WarningIcon(), func() {
+
+			confirmBtn := widget.NewButtonWithIcon("CONFIRM SYSTEM ROLLBACK NOW", theme.WarningIcon(), func() {
 				logToUI("[UI] User confirmed rollback execution.")
 				go func() {
 					ApplyTotalRestore()
-					
+
 					// Revert UI back to normal after restore finished
 					restoreContainer.Objects = nil
 					restoreContainer.Add(restoreNormalLayout)
@@ -299,14 +296,14 @@ func ShowDashboard() {
 				}()
 			})
 			confirmBtn.Importance = widget.DangerImportance
-			
-			cancelBtn := widget.NewButton("❌ Cancel Rollback", func() {
+
+			cancelBtn := widget.NewButton("Cancel Rollback", func() {
 				logToUI("[UI] User cancelled rollback plan.")
 				restoreContainer.Objects = nil
 				restoreContainer.Add(restoreNormalLayout)
 				restoreCard.Refresh()
 			})
-			
+
 			restoreContainer.Add(breakdownLabel)
 			restoreContainer.Add(confirmBtn)
 			restoreContainer.Add(cancelBtn)
@@ -315,20 +312,39 @@ func ShowDashboard() {
 	)
 
 	restoreContainer = container.NewVBox(restoreNormalLayout)
-	restoreCard = widget.NewCard("🛡️ TOTAL RESTORE (SAFE DEFAULT)", "", restoreContainer)
+	restoreCard = widget.NewCard("TOTAL ROLLBACK RESTORE (SAFE DEFAULT)", "", restoreContainer)
 
-	rightColumnContainer := container.NewVScroll(container.NewVBox(
+	// 5. Build Tab Containers (Navbar/Tab design to eliminate scrollbars and simplify layout)
+	boosterTab := container.NewTabItem("Booster Engine", container.NewVBox(
 		hudCard,
-		extremeCard,
-		balancedCard,
-		restoreCard,
+		container.NewGridWithColumns(2,
+			container.NewVBox(extremeCard, balancedCard),
+			restoreCard,
+		),
 	))
 
-	// Split body column layout
-	bodyContainer := container.NewGridWithColumns(2,
-		leftColumnContainer,
-		rightColumnContainer,
-	)
+	systemTab := container.NewTabItem("Memory & Services", container.NewGridWithColumns(2,
+		memCard,
+		srvCard,
+	))
+
+	netDescLabel := widget.NewLabel("TCP NoDelay & Gateway Route Injection are active in Performance Modes.")
+	netDescLabel.Alignment = fyne.TextAlignCenter
+	netDescLabel.TextStyle = fyne.TextStyle{Italic: true}
+
+	networkScroll := container.NewVScroll(container.NewVBox(
+		netDetailsCard,
+		netDescLabel,
+	))
+
+	networkTab := container.NewTabItem("Network Optimization", networkScroll)
+
+	kernelTab := container.NewTabItem("Kernel & GPU Tuner", container.NewVBox(
+		kernelCard,
+	))
+
+	tabs := container.NewAppTabs(boosterTab, systemTab, networkTab, kernelTab)
+	tabs.SetTabLocation(container.TabLocationTop)
 
 	// 5. BOTTOM ROW: ENHANCED LOG FEED MATRIX TRACKER
 	consoleFeed := widget.NewMultiLineEntry()
@@ -338,31 +354,79 @@ func ShowDashboard() {
 	consoleFeed.TextStyle = fyne.TextStyle{Monospace: true}
 
 	consoleContainer := container.NewGridWithRows(1, consoleFeed)
-	consoleCard := widget.NewCard("🖥️ LOG MATRIX STATUS STREAM", "", consoleContainer)
+	consoleCard := widget.NewCard("SYSTEM OPTIMIZATION LOG STREAM", "", consoleContainer)
+
+	// Combine components into final layout with premium VSplit (Split Pane) and border layout
+	bodySplit := container.NewVSplit(
+		tabs,
+		consoleCard,
+	)
+	bodySplit.Offset = 0.68 // 68% height for the tabs, 32% for logs
+
+	mainLayout := container.NewBorder(
+		headerContainer, // Top
+		nil,             // Bottom
+		nil,             // Left
+		nil,             // Right
+		bodySplit,       // Center
+	)
+
+	myWindow.SetContent(mainLayout)
+	myWindow.Resize(fyne.NewSize(1000, 800))
 
 	// 6. ASYNCHRONOUS BACKGROUND STATS UPDATES (Tickers)
 	// Consumes UIConsoleChan safely, prepending prefix scannability icons dynamically
 	go func() {
 		for msg := range UIConsoleChan {
 			currentText := consoleFeed.Text
-			
+
 			// Parse brackets prefix and prepend appropriate scannability icons
-			icon := "💬 "
-			if strings.Contains(msg, "[SYSTEM]") { icon = "⚙️  " }
-			if strings.Contains(msg, "[CLEANER]") { icon = "🧹 " }
-			if strings.Contains(msg, "[BOOSTER]") { icon = "🚀 " }
-			if strings.Contains(msg, "[POWER]") { icon = "🔋 " }
-			if strings.Contains(msg, "[NETWORK]") { icon = "🌐 " }
-			if strings.Contains(msg, "[HARDWARE]") { icon = "⚡ " }
-			if strings.Contains(msg, "[SYSWATCH]") { icon = "🎯 " }
-			if strings.Contains(msg, "[MEMORY]") { icon = "🧠 " }
-			if strings.Contains(msg, "[RESTORE]") { icon = "🛡️  " }
-			if strings.Contains(msg, "[POLLER]") { icon = "🔍 " }
-			if strings.Contains(msg, "[UI]") { icon = "👤 " }
-			if strings.Contains(msg, "[WARNING]") { icon = "⚠️  " }
-			if strings.Contains(msg, "[CRITICAL WARNING]") { icon = "🚨 " }
-			if strings.Contains(msg, "[ERROR]") { icon = "❌ " }
-			if strings.Contains(msg, "[BLUEPRINT]") { icon = "📋 " }
+			tag := "[INFO] "
+			if strings.Contains(msg, "[SYSTEM]") {
+				tag = "[SYS]  "
+			}
+			if strings.Contains(msg, "[CLEANER]") {
+				tag = "[CLN]  "
+			}
+			if strings.Contains(msg, "[BOOSTER]") {
+				tag = "[BST]  "
+			}
+			if strings.Contains(msg, "[POWER]") {
+				tag = "[PWR]  "
+			}
+			if strings.Contains(msg, "[NETWORK]") {
+				tag = "[NET]  "
+			}
+			if strings.Contains(msg, "[HARDWARE]") {
+				tag = "[HW]   "
+			}
+			if strings.Contains(msg, "[SYSWATCH]") {
+				tag = "[WTCH] "
+			}
+			if strings.Contains(msg, "[MEMORY]") {
+				tag = "[MEM]  "
+			}
+			if strings.Contains(msg, "[RESTORE]") {
+				tag = "[RSTR] "
+			}
+			if strings.Contains(msg, "[POLLER]") {
+				tag = "[POLL] "
+			}
+			if strings.Contains(msg, "[UI]") {
+				tag = "[UI]   "
+			}
+			if strings.Contains(msg, "[WARNING]") {
+				tag = "[WARN] "
+			}
+			if strings.Contains(msg, "[CRITICAL WARNING]") {
+				tag = "[CRIT] "
+			}
+			if strings.Contains(msg, "[ERROR]") {
+				tag = "[ERR]  "
+			}
+			if strings.Contains(msg, "[BLUEPRINT]") {
+				tag = "[BLUE] "
+			}
 
 			// Remove bracket tags to clean log feed readability
 			cleanMsg := msg
@@ -382,218 +446,29 @@ func ShowDashboard() {
 			cleanMsg = strings.ReplaceAll(cleanMsg, "[ERROR] ", "")
 			cleanMsg = strings.ReplaceAll(cleanMsg, "[BLUEPRINT] ", "")
 
-			newText := currentText + icon + cleanMsg + "\n"
-			
+			newText := currentText + tag + cleanMsg + "\n"
+
 			// Cap log size at 30k characters to prevent memory leaks
 			if len(newText) > 30000 {
 				newText = newText[15000:]
 			}
-			
-			consoleFeed.SetText(newText)
-			consoleFeed.CursorColumn = len(newText)
+
+			fyne.Do(func() {
+				consoleFeed.SetText(newText)
+				consoleFeed.CursorColumn = len(newText)
+			})
 		}
 	}()
 
 	// Spawn Telemetry Tickers in isolated background goroutines
 	go runTelemetryTickers(
-		ramAllocLabel, ramCacheLabel, ramFreeLabel, memProgress,
-		isolationLabel, separationLabel, timerLabel,
-		srvUpdateLabel, srvTelemetryLabel, srvSysMainLabel,
+		ramAllocLabel, memProgress,
+		cpuOptLabel, timerLabel, hagsLabel, gameModeLabel,
+		srvStatusLabel,
 		hudModeLabel, hudDetailsLabel,
-		pingUSALabel, pingUSAWestLabel, pingEULabel, pingAsiaLabel,
+		netStatusLabel, packetShieldLabel,
 	)
 
-	// Combine components into final grid layout
-	mainLayout := container.New(layout.NewBorderLayout(headerContainer, nil, nil, nil),
-		headerContainer,
-		container.NewGridWithRows(2,
-			bodyContainer,
-			consoleCard,
-		),
-	)
-
-	myWindow.SetContent(mainLayout)
 	logToUI("[SYSTEM] Overhauled UI canvas initialized. Baseline safety plan is active.")
 	myWindow.ShowAndRun()
-}
-
-// runTelemetryTickers sweeps memory status, schedulers, and SCM services asynchronously
-func runTelemetryTickers(
-	ramAlloc, ramCache, ramFree *widget.Label,
-	memProgress *widget.ProgressBar,
-	isolation, separation, timer *widget.Label,
-	srvUpdate, srvTelemetry, srvSysMain *widget.Label,
-	hudMode, hudDetails *widget.Label,
-	pingUSA, pingUSAWest, pingEU, pingAsia *widget.Label,
-) {
-	memTicker := time.NewTicker(1500 * time.Millisecond)
-	pingTicker := time.NewTicker(10 * time.Second)
-	defer memTicker.Stop()
-	defer pingTicker.Stop()
-
-	// Direct gateways for latency estimation
-	usEastGateway := "dynamodb.us-east-1.amazonaws.com:443"
-	usWestGateway := "dynamodb.us-west-2.amazonaws.com:443"
-	euGateway := "dynamodb.eu-central-1.amazonaws.com:443"
-	asiaGateway := "dynamodb.ap-northeast-1.amazonaws.com:443"
-
-	// Immediate run once
-	updateMemoryTelemetry(ramAlloc, ramCache, ramFree, memProgress)
-	updateSchedulerTelemetry(isolation, separation, timer)
-	updateServicesTelemetry(srvUpdate, srvTelemetry, srvSysMain)
-	updatePingTelemetry(pingUSA, usEastGateway, "NA East")
-	updatePingTelemetry(pingUSAWest, usWestGateway, "NA West")
-	updatePingTelemetry(pingEU, euGateway, "Europe")
-	updatePingTelemetry(pingAsia, asiaGateway, "Asia Pacific")
-
-	for {
-		select {
-		case <-memTicker.C:
-			updateMemoryTelemetry(ramAlloc, ramCache, ramFree, memProgress)
-			updateSchedulerTelemetry(isolation, separation, timer)
-			updateServicesTelemetry(srvUpdate, srvTelemetry, srvSysMain)
-			
-			// Update Status HUD
-			mode := GetCurrentMode()
-			hudMode.SetText(fmt.Sprintf("MATRIX STATUS: ENGAGED [%s]", strings.ToUpper(mode)))
-			if mode == "Safe Default" {
-				hudDetails.SetText("Core Parking: Active | MSI Mode: Default | TCP Delay: OS Standard")
-			} else if mode == "Balanced" {
-				hudDetails.SetText("Core Parking: Disabled | MSI Mode: Locked | TCP Delay: Instant Fire")
-			} else {
-				hudDetails.SetText("Core Parking: Disabled | MSI Mode: Locked | TCP Delay: Instant Fire | Services: Frozen")
-			}
-
-		case <-pingTicker.C:
-			// Run pings concurrently to prevent thread block during TCP Handshake delay
-			go updatePingTelemetry(pingUSA, usEastGateway, "NA East")
-			go updatePingTelemetry(pingUSAWest, usWestGateway, "NA West")
-			go updatePingTelemetry(pingEU, euGateway, "Europe")
-			go updatePingTelemetry(pingAsia, asiaGateway, "Asia Pacific")
-		}
-	}
-}
-
-// updateMemoryTelemetry retrieves Windows Global Memory parameters and updates progress bars
-func updateMemoryTelemetry(ramAlloc, ramCache, ramFree *widget.Label, memProgress *widget.ProgressBar) {
-	var mem memoryStatusEx
-	mem.Length = uint32(unsafe.Sizeof(mem))
-
-	r1, _, _ := procGlobalMemoryStatus.Call(uintptr(unsafe.Pointer(&mem)))
-	if r1 == 0 {
-		ramAlloc.SetText("Memory Allocation: Failed to query Windows APIs")
-		return
-	}
-
-	totalGB := float64(mem.TotalPhys) / (1024 * 1024 * 1024)
-	availGB := float64(mem.AvailPhys) / (1024 * 1024 * 1024)
-	allocGB := totalGB - availGB
-	percent := float64(mem.MemoryLoad)
-
-	// In modern Windows, Standby/Cached is aviable within the system profile, we calculate mock cache segments beautifully
-	cacheGB := availGB * 0.35
-	freeGB := availGB - cacheGB
-
-	ramAlloc.SetText(fmt.Sprintf(" Allocated: %.2f GB / %.2f GB (%d%%)", allocGB, totalGB, int(percent)))
-	ramCacheLabel := fmt.Sprintf(" Cached:    %.2f GB [Standby Memory Pool]", cacheGB)
-	ramCache.SetText(ramCacheLabel)
-	ramFree.SetText(fmt.Sprintf(" Available: %.2f GB [Available Physical RAM]", freeGB))
-
-	memProgress.SetValue(percent / 100.0)
-}
-
-// updateSchedulerTelemetry displays scheduler and timer states based on our active configurations
-func updateSchedulerTelemetry(isolation, separation, timer *widget.Label) {
-	mode := GetCurrentMode()
-	if mode == "Safe Default" {
-		isolation.SetText("Thread Isolation: Inactive")
-		separation.SetText("Foreground Quantum: Safe Default")
-		timer.SetText("Timer Resolution: OS Default (1.0ms)")
-	} else {
-		isolation.SetText("Thread Isolation: Active (Cores 2-N Locked)")
-		separation.SetText("Foreground Quantum: Short-Variable Optimized (0x26)")
-		timer.SetText("Timer Resolution: Invariant Precision Locked (0.5ms)")
-	}
-}
-
-// updateServicesTelemetry checks key Windows services PID and statuses
-func updateServicesTelemetry(srvUpdate, srvTelemetry, srvSysMain *widget.Label) {
-	m, err := mgr.Connect()
-	if err != nil {
-		return
-	}
-	defer m.Disconnect()
-
-	// 1. Windows Update
-	if su, err := m.OpenService("wuauserv"); err == nil {
-		status, err := su.Query()
-		if err == nil {
-			if servicesFrozen && status.State == svc.Stopped {
-				srvUpdate.SetText(" Windows Update (wuauserv): Frozen [NtSuspendProcess]")
-			} else {
-				srvUpdate.SetText(fmt.Sprintf(" Windows Update (wuauserv): %s (PID: %d)", serviceStateToString(status.State), status.ProcessId))
-			}
-		}
-		su.Close()
-	}
-
-	// 2. DiagTrack
-	if sd, err := m.OpenService("DiagTrack"); err == nil {
-		status, err := sd.Query()
-		if err == nil {
-			if servicesFrozen && status.State == svc.Stopped {
-				srvTelemetry.SetText(" Telemetry (DiagTrack): Frozen [NtSuspendProcess]")
-			} else {
-				srvTelemetry.SetText(fmt.Sprintf(" Telemetry (DiagTrack): %s (PID: %d)", serviceStateToString(status.State), status.ProcessId))
-			}
-		}
-		sd.Close()
-	}
-
-	// 3. SysMain
-	if ss, err := m.OpenService("SysMain"); err == nil {
-		status, err := ss.Query()
-		if err == nil {
-			if status.State == svc.Stopped {
-				srvSysMain.SetText(" SysMain (Superfetch): Disabled & Stopped [COMPACT]")
-			} else {
-				srvSysMain.SetText(fmt.Sprintf(" SysMain (Superfetch): %s (PID: %d)", serviceStateToString(status.State), status.ProcessId))
-			}
-		}
-		ss.Close()
-	}
-}
-
-func serviceStateToString(state svc.State) string {
-	switch state {
-	case svc.Stopped:
-		return "Stopped"
-	case svc.StartPending:
-		return "Starting"
-	case svc.StopPending:
-		return "Stopping"
-	case svc.Running:
-		return "Running"
-	case svc.ContinuePending:
-		return "Continuing"
-	case svc.PausePending:
-		return "Pausing"
-	case svc.Paused:
-		return "Paused"
-	default:
-		return "Unknown"
-	}
-}
-
-// updatePingTelemetry measures fast TCP gateway Handshake delays
-func updatePingTelemetry(label *widget.Label, target, regionName string) {
-	start := time.Now()
-	conn, err := net.DialTimeout("tcp", target, 1200*time.Millisecond)
-	if err != nil {
-		label.SetText(fmt.Sprintf("%s: Offline", regionName))
-		return
-	}
-	conn.Close()
-	ms := time.Since(start).Milliseconds()
-	label.SetText(fmt.Sprintf("%s: %d ms", regionName, ms))
 }
