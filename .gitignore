@@ -21,5 +21,11 @@
 go.work
 go.work.sum
 
+
 # env file
 .env
+
+# NosBoost Local State & Documentation
+docs/
+state_backup.json
+
