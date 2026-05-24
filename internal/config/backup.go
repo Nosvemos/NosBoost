@@ -215,6 +215,25 @@ func SaveBaselineState() (*SystemBaselineState, error) {
 		priKey.Close()
 	}
 
+	// 5c. BACK UP PERIPHERAL QUEUES
+	mouseParamPath := `SYSTEM\CurrentControlSet\Services\mouclass\Parameters`
+	if mKey, err := registry.OpenKey(registry.LOCAL_MACHINE, mouseParamPath, registry.QUERY_VALUE); err == nil {
+		if val, _, err := mKey.GetIntegerValue("MouseDataQueueSize"); err == nil {
+			baseline.MouseQueueExist = true
+			baseline.MouseQueueValue = uint32(val)
+		}
+		mKey.Close()
+	}
+
+	keyboardParamPath := `SYSTEM\CurrentControlSet\Services\kbdclass\Parameters`
+	if kKey, err := registry.OpenKey(registry.LOCAL_MACHINE, keyboardParamPath, registry.QUERY_VALUE); err == nil {
+		if val, _, err := kKey.GetIntegerValue("KeyboardDataQueueSize"); err == nil {
+			baseline.KeyboardQueueExist = true
+			baseline.KeyboardQueueValue = uint32(val)
+		}
+		kKey.Close()
+	}
+
 	// 6. SERIALIZE AND WRITE BASELINE STATE TO FILE
 	data, err := json.MarshalIndent(baseline, "", "  ")
 	if err != nil {
@@ -390,6 +409,27 @@ func RestoreBaselineState() error {
 			_ = priKey.DeleteValue("Win32PrioritySeparation")
 		}
 		priKey.Close()
+	}
+
+	// 5c. RESTORE PERIPHERAL QUEUES
+	mouseParamPath := `SYSTEM\CurrentControlSet\Services\mouclass\Parameters`
+	if mKey, err := registry.OpenKey(registry.LOCAL_MACHINE, mouseParamPath, registry.SET_VALUE); err == nil {
+		if baseline.MouseQueueExist {
+			_ = mKey.SetDWordValue("MouseDataQueueSize", baseline.MouseQueueValue)
+		} else {
+			_ = mKey.DeleteValue("MouseDataQueueSize")
+		}
+		mKey.Close()
+	}
+
+	keyboardParamPath := `SYSTEM\CurrentControlSet\Services\kbdclass\Parameters`
+	if kKey, err := registry.OpenKey(registry.LOCAL_MACHINE, keyboardParamPath, registry.SET_VALUE); err == nil {
+		if baseline.KeyboardQueueExist {
+			_ = kKey.SetDWordValue("KeyboardDataQueueSize", baseline.KeyboardQueueValue)
+		} else {
+			_ = kKey.DeleteValue("KeyboardDataQueueSize")
+		}
+		kKey.Close()
 	}
 
 	return nil

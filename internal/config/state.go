@@ -57,5 +57,9 @@ type SystemBaselineState struct {
 	Services                     []ServiceBackupState `json:"services"`
 	Win32PrioritySeparationExist bool                 `json:"win32_priority_separation_exist"`
 	Win32PrioritySeparationValue uint32               `json:"win32_priority_separation_value"`
+	MouseQueueExist              bool                 `json:"mouse_queue_exist"`
+	MouseQueueValue              uint32               `json:"mouse_queue_value"`
+	KeyboardQueueExist           bool                 `json:"keyboard_queue_exist"`
+	KeyboardQueueValue           uint32               `json:"keyboard_queue_value"`
 }
 const BackupFileName = "state_backup.json"
