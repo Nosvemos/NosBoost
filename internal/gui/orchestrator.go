@@ -145,6 +145,14 @@ func ApplyExtremeMode() {
 		logToUI(fmt.Sprintf("[WARNING] Priority separation optimization failed: %v", err))
 	}
 
+	if GetCurrentMode() != "Extreme" { return }
+	logToUI("[BOOSTER] Tuning MMCSS Games task to Short Variable, High GPU Priority...")
+	if err := booster.OptimizeGamesTask(); err == nil {
+		logToUI("[BOOSTER] MMCSS games scheduler priorities optimized successfully.")
+	} else {
+		logToUI(fmt.Sprintf("[WARNING] MMCSS games priority optimization failed: %v", err))
+	}
+
 	// 4. Power Plan Settings
 	if GetCurrentMode() != "Extreme" { return }
 	logToUI("[POWER] Elevating system power plan to Ultimate Performance...")
@@ -241,6 +249,14 @@ func ApplyExtremeMode() {
 	logToUI("[MEMORY] Standby and modified list pages cleared. Available physical RAM maximized.")
 
 	if GetCurrentMode() != "Extreme" { return }
+	logToUI("[MEMORY] Tuning Windows paging executive to prevent driver disk paging stutters...")
+	if err := memory.OptimizePagingExecutive(); err == nil {
+		logToUI("[MEMORY] Paging executive optimized (Kernel & drivers locked in RAM).")
+	} else {
+		logToUI(fmt.Sprintf("[WARNING] Paging executive optimization failed: %v", err))
+	}
+
+	if GetCurrentMode() != "Extreme" { return }
 	logToUI("[MEMORY] Stopping service SysMain to disable background cache analysis...")
 	if err := memory.DisableSysMain(); err == nil {
 		logToUI("[MEMORY] SysMain caching stopped and startup set to Disabled.")
@@ -299,6 +315,10 @@ func ApplyBalancedMode() {
 	logToUI("[BOOSTER] Tuning Win32 Priority Separation to short-variable gaming index (0x26)...")
 	_ = booster.OptimizePrioritySeparation()
 
+	if GetCurrentMode() != "Balanced" { return }
+	logToUI("[BOOSTER] Tuning MMCSS Games task to Short Variable, High GPU Priority...")
+	_ = booster.OptimizeGamesTask()
+
 	// 4. Power Plan Settings
 	if GetCurrentMode() != "Balanced" { return }
 	logToUI("[POWER] Elevating system power plan to Ultimate Performance...")
@@ -352,6 +372,14 @@ func ApplyBalancedMode() {
 	logToUI("[MEMORY] Sweeping cache memory pages & standby list files...")
 	_ = memory.PurgeStandbyList()
 	_ = memory.FlushModifiedList()
+
+	if GetCurrentMode() != "Balanced" { return }
+	logToUI("[MEMORY] Tuning Windows paging executive to prevent driver disk paging stutters...")
+	if err := memory.OptimizePagingExecutive(); err == nil {
+		logToUI("[MEMORY] Paging executive optimized (Kernel & drivers locked in RAM).")
+	} else {
+		logToUI(fmt.Sprintf("[WARNING] Paging executive optimization failed: %v", err))
+	}
 
 	if GetCurrentMode() != "Balanced" { return }
 	logToUI("[MEMORY] Stopping service SysMain to disable background cache analysis...")
@@ -469,6 +497,7 @@ func ApplyTotalRestore() {
 	// 8. Revert game-specific tweaks (affinity, priority separation)
 	logToUI("[RESTORE] Restoring background scheduling priorities...")
 	_ = booster.RestorePrioritySeparation()
+	_ = booster.RestoreGamesTask()
 	booster.RestoreAffinities(0, 0)
 	cleaner.RestoreBackgroundIO()
 

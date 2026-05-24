@@ -151,6 +151,9 @@ func InjectTCPNoDelay() error {
 	if err := nicKey.SetDWordValue("TCPNoDelay", 1); err != nil {
 		return fmt.Errorf("failed to set TCPNoDelay: %w", err)
 	}
+	if err := nicKey.SetDWordValue("TcpDelAckTicks", 0); err != nil {
+		return fmt.Errorf("failed to set TcpDelAckTicks: %w", err)
+	}
 
 	// 2. Enforce system responsiveness priority tweaks under HKLM Multimedia SystemProfile
 	profileKey, err := registry.OpenKey(registry.LOCAL_MACHINE, SystemProfileKey, registry.SET_VALUE)
@@ -200,6 +203,11 @@ func RevertTCPNoDelay() error {
 				} else {
 					_ = nicKey.DeleteValue("TCPNoDelay")
 				}
+				if originalNic.TcpDelAckTicksExists {
+					_ = nicKey.SetDWordValue("TcpDelAckTicks", originalNic.TcpDelAckTicksValue)
+				} else {
+					_ = nicKey.DeleteValue("TcpDelAckTicks")
+				}
 				break
 			}
 		}
@@ -207,6 +215,7 @@ func RevertTCPNoDelay() error {
 		if !foundOriginal {
 			_ = nicKey.DeleteValue("TcpAckFrequency")
 			_ = nicKey.DeleteValue("TCPNoDelay")
+			_ = nicKey.DeleteValue("TcpDelAckTicks")
 		}
 		nicKey.Close()
 	}
@@ -240,16 +249,46 @@ func OptimizeNetworkInterfaceSettings() error {
 	// 2. Disable Receive Segment Coalescing (RSC) which causes packet latency/jitter stutters
 	_ = system.Exec("powershell", "-Command", "Disable-NetAdapterRsc -Name * -Confirm:$false -ErrorAction SilentlyContinue")
 
+	// 2b. Disable Packet Coalescing which delays packet interrupts to the CPU
+	_ = system.Exec("powershell", "-Command", "Disable-NetAdapterPacketCoalescing -Name * -Confirm:$false -ErrorAction SilentlyContinue")
+
 	// 3. Configure netsh global TCP low-latency/loss-prevention overrides
 	_ = system.Exec("netsh", "int", "tcp", "set", "global", "rss=enabled")
 	_ = system.Exec("netsh", "int", "tcp", "set", "global", "dca=enabled")
 	_ = system.Exec("netsh", "int", "tcp", "set", "global", "ecncapability=disabled")
 	_ = system.Exec("netsh", "int", "tcp", "set", "global", "autotuninglevel=normal")
+	_ = system.Exec("netsh", "int", "tcp", "set", "global", "heuristics=disabled")
+
+	// 4. Inject advanced TCP socket exhaustion & RFC latency overrides
+	tcpPath := `SYSTEM\CurrentControlSet\Services\Tcpip\Parameters`
+	if key, err := registry.OpenKey(registry.LOCAL_MACHINE, tcpPath, registry.SET_VALUE); err == nil {
+		_ = key.SetDWordValue("MaxUserPort", 65534)
+		_ = key.SetDWordValue("TcpNumConnections", 16777214)
+		_ = key.SetDWordValue("Tcp1323Opts", 0)
+		key.Close()
+	}
+
+	// 5. Disable dynamic Energy Efficient Ethernet, Green power savings, Flow Control & Interrupt Moderation on active NIC Class
+	if classKey, err := registry.OpenKey(registry.LOCAL_MACHINE, `SYSTEM\CurrentControlSet\Control\Class\{4d36e972-e325-11ce-bfc1-08002be10318}`, registry.QUERY_VALUE); err == nil {
+		if subKeys, err := classKey.ReadSubKeyNames(-1); err == nil {
+			for _, sub := range subKeys {
+				if subKey, err := registry.OpenKey(registry.LOCAL_MACHINE, `SYSTEM\CurrentControlSet\Control\Class\{4d36e972-e325-11ce-bfc1-08002be10318}\`+sub, registry.SET_VALUE); err == nil {
+					_ = subKey.SetStringValue("*EEE", "0")
+					_ = subKey.SetStringValue("*GreenPower", "0")
+					_ = subKey.SetStringValue("*PowerSavingMode", "0")
+					_ = subKey.SetStringValue("*FlowControl", "0")
+					_ = subKey.SetStringValue("*InterruptModeration", "0")
+					subKey.Close()
+				}
+			}
+		}
+		classKey.Close()
+	}
 
 	return nil
 }
 
-// RestoreNetworkInterfaceSettings restores LSO, RSC and global TCP settings to OS defaults.
+// RestoreNetworkInterfaceSettings restores LSO, RSC, packet coalescing, and global TCP settings to OS defaults.
 func RestoreNetworkInterfaceSettings() error {
 	// 1. Re-enable Large Send Offload (LSO) to Windows defaults
 	_ = system.Exec("powershell", "-Command", "Enable-NetAdapterLso -Name * -IPv4 -Confirm:$false -ErrorAction SilentlyContinue")
@@ -258,11 +297,56 @@ func RestoreNetworkInterfaceSettings() error {
 	// 2. Re-enable Receive Segment Coalescing (RSC) to Windows defaults
 	_ = system.Exec("powershell", "-Command", "Enable-NetAdapterRsc -Name * -Confirm:$false -ErrorAction SilentlyContinue")
 
+	// 2b. Re-enable Packet Coalescing to Windows defaults
+	_ = system.Exec("powershell", "-Command", "Enable-NetAdapterPacketCoalescing -Name * -Confirm:$false -ErrorAction SilentlyContinue")
+
 	// 3. Restore global TCP parameters to default OS profiles
 	_ = system.Exec("netsh", "int", "tcp", "set", "global", "rss=enabled")
 	_ = system.Exec("netsh", "int", "tcp", "set", "global", "dca=disabled")
 	_ = system.Exec("netsh", "int", "tcp", "set", "global", "ecncapability=default")
 	_ = system.Exec("netsh", "int", "tcp", "set", "global", "autotuninglevel=normal")
+	_ = system.Exec("netsh", "int", "tcp", "set", "global", "heuristics=enabled")
+
+	// 4. Restore TCP parameters from recorded baseline
+	baseline, err := config.LoadBaselineState()
+	if err == nil {
+		tcpPath := `SYSTEM\CurrentControlSet\Services\Tcpip\Parameters`
+		if key, err := registry.OpenKey(registry.LOCAL_MACHINE, tcpPath, registry.SET_VALUE); err == nil {
+			if baseline.MaxUserPortExists {
+				_ = key.SetDWordValue("MaxUserPort", baseline.MaxUserPortValue)
+			} else {
+				_ = key.DeleteValue("MaxUserPort")
+			}
+			if baseline.TcpNumConnectionsExists {
+				_ = key.SetDWordValue("TcpNumConnections", baseline.TcpNumConnectionsValue)
+			} else {
+				_ = key.DeleteValue("TcpNumConnections")
+			}
+			if baseline.Tcp1323OptsExists {
+				_ = key.SetDWordValue("Tcp1323Opts", baseline.Tcp1323OptsValue)
+			} else {
+				_ = key.DeleteValue("Tcp1323Opts")
+			}
+			key.Close()
+		}
+
+		// 5. Restore Energy Efficient Ethernet, Green power savings, Flow Control & Interrupt Moderation
+		if classKey, err := registry.OpenKey(registry.LOCAL_MACHINE, `SYSTEM\CurrentControlSet\Control\Class\{4d36e972-e325-11ce-bfc1-08002be10318}`, registry.QUERY_VALUE); err == nil {
+			if subKeys, err := classKey.ReadSubKeyNames(-1); err == nil {
+				for _, sub := range subKeys {
+					if subKey, err := registry.OpenKey(registry.LOCAL_MACHINE, `SYSTEM\CurrentControlSet\Control\Class\{4d36e972-e325-11ce-bfc1-08002be10318}\`+sub, registry.SET_VALUE); err == nil {
+						_ = subKey.SetStringValue("*EEE", "1")
+						_ = subKey.SetStringValue("*GreenPower", "1")
+						_ = subKey.SetStringValue("*PowerSavingMode", "0")
+						_ = subKey.SetStringValue("*FlowControl", "3")
+						_ = subKey.SetStringValue("*InterruptModeration", "1")
+						subKey.Close()
+					}
+				}
+			}
+			classKey.Close()
+		}
+	}
 
 	return nil
 }

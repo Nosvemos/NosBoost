@@ -15,9 +15,11 @@ import (
 
 	"golang.org/x/sys/windows/svc/mgr"
 
+	"nosboost/internal/booster"
 	"nosboost/internal/config"
 	"nosboost/internal/hardware"
 	"nosboost/internal/memory"
+	"nosboost/internal/network"
 	"nosboost/internal/system"
 	"nosboost/internal/syswatch"
 )
@@ -39,6 +41,12 @@ func (l *DynamicGridLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
 		return fyne.NewSize(0, 0)
 	}
 	w := l.MinColWidth
+	for _, obj := range objects {
+		minW := obj.MinSize().Width
+		if minW > w {
+			w = minW
+		}
+	}
 	h := float32(0)
 	for _, obj := range objects {
 		h += obj.MinSize().Height + theme.Padding()
@@ -479,6 +487,94 @@ func ShowDashboard() {
 		}()
 	})
 
+	netJitterDescLabel := widget.NewLabel(config.T("net_jitter_desc"))
+	netJitterDescLabel.Wrapping = fyne.TextWrapWord
+	netJitterCheck := widget.NewCheck(config.T("net_jitter_label"), func(checked bool) {
+		go func() {
+			var err error
+			if checked {
+				err = network.OptimizeNetworkInterfaceSettings()
+			} else {
+				err = network.RestoreNetworkInterfaceSettings()
+			}
+			if err != nil {
+				logToUI(fmt.Sprintf("[ERROR] eSports Network Jitter Shield toggle failed: %v", err))
+			} else {
+				if checked {
+					logToUI("[SYS] eSports Network Jitter Shield engaged (Packet Coalescing, Flow Control, and Interrupt Moderation disabled).")
+				} else {
+					logToUI("[SYS] eSports Network Jitter Shield reverted to OS defaults.")
+				}
+			}
+		}()
+	})
+
+	tcpAckDescLabel := widget.NewLabel(config.T("tcp_ack_desc"))
+	tcpAckDescLabel.Wrapping = fyne.TextWrapWord
+	tcpAckCheck := widget.NewCheck(config.T("tcp_ack_label"), func(checked bool) {
+		go func() {
+			var err error
+			if checked {
+				err = network.InjectTCPNoDelay()
+			} else {
+				err = network.RevertTCPNoDelay()
+			}
+			if err != nil {
+				logToUI(fmt.Sprintf("[ERROR] Disable TCP Delayed ACK toggle failed: %v", err))
+			} else {
+				if checked {
+					logToUI("[SYS] TCP Delayed ACK disabled successfully (Nagling suspended).")
+				} else {
+					logToUI("[SYS] TCP Delayed ACK reverted to OS defaults.")
+				}
+			}
+		}()
+	})
+
+	mmcssDescLabel := widget.NewLabel(config.T("mmcss_desc"))
+	mmcssDescLabel.Wrapping = fyne.TextWrapWord
+	mmcssCheck := widget.NewCheck(config.T("mmcss_label"), func(checked bool) {
+		go func() {
+			var err error
+			if checked {
+				err = booster.OptimizeGamesTask()
+			} else {
+				err = booster.RestoreGamesTask()
+			}
+			if err != nil {
+				logToUI(fmt.Sprintf("[ERROR] Esports Kernel MMCSS Priority toggle failed: %v", err))
+			} else {
+				if checked {
+					logToUI("[SYS] Windows MMCSS Games priority tuned to short-variable gaming priority (High).")
+				} else {
+					logToUI("[SYS] Windows MMCSS Games priority reverted to default scheduling.")
+				}
+			}
+		}()
+	})
+
+	pagingDescLabel := widget.NewLabel(config.T("paging_desc"))
+	pagingDescLabel.Wrapping = fyne.TextWrapWord
+	pagingCheck := widget.NewCheck(config.T("paging_label"), func(checked bool) {
+		go func() {
+			var err error
+			if checked {
+				err = memory.OptimizePagingExecutive()
+			} else {
+				err = memory.RestorePagingExecutive()
+			}
+			if err != nil {
+				logToUI(fmt.Sprintf("[ERROR] Lock Kernel & Drivers in RAM toggle failed: %v", err))
+			} else {
+				if checked {
+					logToUI("[SYS] Windows Paging Executive tuned (Core kernel & drivers locked directly in RAM).")
+				} else {
+					logToUI("[SYS] Windows Paging Executive reverted to OS standard.")
+				}
+			}
+		}()
+	})
+
 	settingsPerfCard := widget.NewCard(config.T("settings_perf"), "", container.NewVBox(
 		dwmCheck,
 		dwmDescLabel,
@@ -488,6 +584,18 @@ func ShowDashboard() {
 		widget.NewSeparator(),
 		hiberCheck,
 		hiberDescLabel,
+		widget.NewSeparator(),
+		netJitterCheck,
+		netJitterDescLabel,
+		widget.NewSeparator(),
+		tcpAckCheck,
+		tcpAckDescLabel,
+		widget.NewSeparator(),
+		mmcssCheck,
+		mmcssDescLabel,
+		widget.NewSeparator(),
+		pagingCheck,
+		pagingDescLabel,
 	))
 
 	settingsScroll := container.NewVScroll(container.NewVBox(
@@ -604,6 +712,14 @@ func ShowDashboard() {
 		searchDescLabel.SetText(config.T("search_desc"))
 		hiberCheck.SetText(config.T("hiber_label"))
 		hiberDescLabel.SetText(config.T("hiber_desc"))
+		netJitterCheck.SetText(config.T("net_jitter_label"))
+		netJitterDescLabel.SetText(config.T("net_jitter_desc"))
+		tcpAckCheck.SetText(config.T("tcp_ack_label"))
+		tcpAckDescLabel.SetText(config.T("tcp_ack_desc"))
+		mmcssCheck.SetText(config.T("mmcss_label"))
+		mmcssDescLabel.SetText(config.T("mmcss_desc"))
+		pagingCheck.SetText(config.T("paging_label"))
+		pagingDescLabel.SetText(config.T("paging_desc"))
 
 		boosterTab.Text = config.T("booster_tab")
 		systemTab.Text = config.T("memory_tab")

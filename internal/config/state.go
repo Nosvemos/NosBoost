@@ -16,6 +16,8 @@ type NICBackupState struct {
 	TcpAckFrequencyValue  uint32 `json:"tcp_ack_frequency_value"`
 	TCPNoDelayExists      bool   `json:"tcp_nodelay_exists"`
 	TCPNoDelayValue       uint32 `json:"tcp_nodelay_value"`
+	TcpDelAckTicksExists  bool   `json:"tcp_delack_ticks_exists"`
+	TcpDelAckTicksValue   uint32 `json:"tcp_delack_ticks_value"`
 }
 
 // NetworkBackupState tracks system-wide and adapter-specific latency optimizations.
@@ -47,6 +49,24 @@ type ServiceBackupState struct {
 	StartValue  uint32 `json:"start_value"`
 }
 
+// GamesTaskBackupState stores original multimedia scheduling parameters for games.
+type GamesTaskBackupState struct {
+	AffinityExists           bool   `json:"affinity_exists"`
+	AffinityValue            uint32 `json:"affinity_value"`
+	BackgroundOnlyExists     bool   `json:"background_only_exists"`
+	BackgroundOnlyValue      string `json:"background_only_value"`
+	ClockRateExists          bool   `json:"clock_rate_exists"`
+	ClockRateValue           uint32 `json:"clock_rate_value"`
+	GPUPriorityExists        bool   `json:"gpu_priority_exists"`
+	GPUPriorityValue         uint32 `json:"gpu_priority_value"`
+	PriorityExists           bool   `json:"priority_exists"`
+	PriorityValue            uint32 `json:"priority_value"`
+	SchedulingCategoryExists bool   `json:"scheduling_category_exists"`
+	SchedulingCategoryValue  string `json:"scheduling_category_value"`
+	SFIOPriorityExists       bool   `json:"sfio_priority_exists"`
+	SFIOPriorityValue        string `json:"sfio_priority_value"`
+}
+
 // SystemBaselineState is the primary container for a full restoration point of the Windows OS.
 type SystemBaselineState struct {
 	Version                      string               `json:"version"`
@@ -55,6 +75,7 @@ type SystemBaselineState struct {
 	Network                      NetworkBackupState   `json:"network"`
 	Power                        PowerBackupState     `json:"power"`
 	Services                     []ServiceBackupState `json:"services"`
+	GamesTask                    GamesTaskBackupState `json:"games_task"`
 	Win32PrioritySeparationExist bool                 `json:"win32_priority_separation_exist"`
 	Win32PrioritySeparationValue uint32               `json:"win32_priority_separation_value"`
 	MouseQueueExist              bool                 `json:"mouse_queue_exist"`
@@ -75,5 +96,15 @@ type SystemBaselineState struct {
 	GameDVREnabledValue          uint32               `json:"gamedvr_enabled_value"`
 	AppCaptureEnabledExists      bool                 `json:"app_capture_enabled_exists"`
 	AppCaptureEnabledValue       uint32               `json:"app_capture_enabled_value"`
+	MaxUserPortExists            bool                 `json:"max_user_port_exists"`
+	MaxUserPortValue             uint32               `json:"max_user_port_value"`
+	TcpNumConnectionsExists      bool                 `json:"tcp_num_connections_exists"`
+	TcpNumConnectionsValue       uint32               `json:"tcp_num_connections_value"`
+	Tcp1323OptsExists            bool                 `json:"tcp_1323_opts_exists"`
+	Tcp1323OptsValue             uint32               `json:"tcp_1323_opts_value"`
+	DisablePagingExecutiveExists bool                 `json:"disable_paging_executive_exists"`
+	DisablePagingExecutiveValue  uint32               `json:"disable_paging_executive_value"`
+	LargeSystemCacheExists       bool                 `json:"large_system_cache_exists"`
+	LargeSystemCacheValue        uint32               `json:"large_system_cache_value"`
 }
 const BackupFileName = "state_backup.json"

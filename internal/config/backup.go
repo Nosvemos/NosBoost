@@ -146,6 +146,10 @@ func SaveBaselineState() (*SystemBaselineState, error) {
 						nicBackup.TCPNoDelayExists = true
 						nicBackup.TCPNoDelayValue = uint32(val)
 					}
+					if val, _, err := nicKey.GetIntegerValue("TcpDelAckTicks"); err == nil {
+						nicBackup.TcpDelAckTicksExists = true
+						nicBackup.TcpDelAckTicksValue = uint32(val)
+					}
 					baseline.Network.NICs = append(baseline.Network.NICs, nicBackup)
 					nicKey.Close()
 				}
@@ -280,7 +284,71 @@ func SaveBaselineState() (*SystemBaselineState, error) {
 		}
 		key.Close()
 	}
+	// 5g. BACK UP TCP PARAMETERS (MaxUserPort, TcpNumConnections, Tcp1323Opts)
+	tcpPath := `SYSTEM\CurrentControlSet\Services\Tcpip\Parameters`
+	if key, err := registry.OpenKey(registry.LOCAL_MACHINE, tcpPath, registry.QUERY_VALUE); err == nil {
+		if val, _, err := key.GetIntegerValue("MaxUserPort"); err == nil {
+			baseline.MaxUserPortExists = true
+			baseline.MaxUserPortValue = uint32(val)
+		}
+		if val, _, err := key.GetIntegerValue("TcpNumConnections"); err == nil {
+			baseline.TcpNumConnectionsExists = true
+			baseline.TcpNumConnectionsValue = uint32(val)
+		}
+		if val, _, err := key.GetIntegerValue("Tcp1323Opts"); err == nil {
+			baseline.Tcp1323OptsExists = true
+			baseline.Tcp1323OptsValue = uint32(val)
+		}
+		key.Close()
+	}
 
+	// 5h. BACK UP MEMORY MANAGEMENT PARAMETERS (DisablePagingExecutive, LargeSystemCache)
+	mmPath := `SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management`
+	if key, err := registry.OpenKey(registry.LOCAL_MACHINE, mmPath, registry.QUERY_VALUE); err == nil {
+		if val, _, err := key.GetIntegerValue("DisablePagingExecutive"); err == nil {
+			baseline.DisablePagingExecutiveExists = true
+			baseline.DisablePagingExecutiveValue = uint32(val)
+		}
+		if val, _, err := key.GetIntegerValue("LargeSystemCache"); err == nil {
+			baseline.LargeSystemCacheExists = true
+			baseline.LargeSystemCacheValue = uint32(val)
+		}
+		key.Close()
+	}
+
+	// 5i. BACK UP MULTIMEDIA CLASS SCHEDULER SERVICE (MMCSS) GAMES TASK
+	gamesTaskPath := `SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games`
+	if key, err := registry.OpenKey(registry.LOCAL_MACHINE, gamesTaskPath, registry.QUERY_VALUE); err == nil {
+		if val, _, err := key.GetIntegerValue("Affinity"); err == nil {
+			baseline.GamesTask.AffinityExists = true
+			baseline.GamesTask.AffinityValue = uint32(val)
+		}
+		if val, _, err := key.GetStringValue("Background Only"); err == nil {
+			baseline.GamesTask.BackgroundOnlyExists = true
+			baseline.GamesTask.BackgroundOnlyValue = val
+		}
+		if val, _, err := key.GetIntegerValue("Clock Rate"); err == nil {
+			baseline.GamesTask.ClockRateExists = true
+			baseline.GamesTask.ClockRateValue = uint32(val)
+		}
+		if val, _, err := key.GetIntegerValue("GPU Priority"); err == nil {
+			baseline.GamesTask.GPUPriorityExists = true
+			baseline.GamesTask.GPUPriorityValue = uint32(val)
+		}
+		if val, _, err := key.GetIntegerValue("Priority"); err == nil {
+			baseline.GamesTask.PriorityExists = true
+			baseline.GamesTask.PriorityValue = uint32(val)
+		}
+		if val, _, err := key.GetStringValue("Scheduling Category"); err == nil {
+			baseline.GamesTask.SchedulingCategoryExists = true
+			baseline.GamesTask.SchedulingCategoryValue = val
+		}
+		if val, _, err := key.GetStringValue("SFIO Priority"); err == nil {
+			baseline.GamesTask.SFIOPriorityExists = true
+			baseline.GamesTask.SFIOPriorityValue = val
+		}
+		key.Close()
+	}
 
 	// 6. SERIALIZE AND WRITE BASELINE STATE TO FILE
 	data, err := json.MarshalIndent(baseline, "", "  ")
@@ -383,6 +451,12 @@ func RestoreBaselineState() error {
 				_ = nicKey.SetDWordValue("TCPNoDelay", nic.TCPNoDelayValue)
 			} else {
 				_ = nicKey.DeleteValue("TCPNoDelay")
+			}
+
+			if nic.TcpDelAckTicksExists {
+				_ = nicKey.SetDWordValue("TcpDelAckTicks", nic.TcpDelAckTicksValue)
+			} else {
+				_ = nicKey.DeleteValue("TcpDelAckTicks")
 			}
 			nicKey.Close()
 		}
@@ -518,6 +592,83 @@ func RestoreBaselineState() error {
 			_ = key.SetDWordValue("AppCaptureEnabled", baseline.AppCaptureEnabledValue)
 		} else {
 			_ = key.DeleteValue("AppCaptureEnabled")
+		}
+	}
+
+	// 5g. RESTORE TCP PARAMETERS
+	tcpPath := `SYSTEM\CurrentControlSet\Services\Tcpip\Parameters`
+	if key, err := registry.OpenKey(registry.LOCAL_MACHINE, tcpPath, registry.SET_VALUE); err == nil {
+		if baseline.MaxUserPortExists {
+			_ = key.SetDWordValue("MaxUserPort", baseline.MaxUserPortValue)
+		} else {
+			_ = key.DeleteValue("MaxUserPort")
+		}
+		if baseline.TcpNumConnectionsExists {
+			_ = key.SetDWordValue("TcpNumConnections", baseline.TcpNumConnectionsValue)
+		} else {
+			_ = key.DeleteValue("TcpNumConnections")
+		}
+		if baseline.Tcp1323OptsExists {
+			_ = key.SetDWordValue("Tcp1323Opts", baseline.Tcp1323OptsValue)
+		} else {
+			_ = key.DeleteValue("Tcp1323Opts")
+		}
+		key.Close()
+	}
+
+	// 5h. RESTORE MEMORY MANAGEMENT PARAMETERS
+	mmPath := `SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management`
+	if key, err := registry.OpenKey(registry.LOCAL_MACHINE, mmPath, registry.SET_VALUE); err == nil {
+		if baseline.DisablePagingExecutiveExists {
+			_ = key.SetDWordValue("DisablePagingExecutive", baseline.DisablePagingExecutiveValue)
+		} else {
+			_ = key.DeleteValue("DisablePagingExecutive")
+		}
+		if baseline.LargeSystemCacheExists {
+			_ = key.SetDWordValue("LargeSystemCache", baseline.LargeSystemCacheValue)
+		} else {
+			_ = key.DeleteValue("LargeSystemCache")
+		}
+		key.Close()
+	}
+
+	// 5i. RESTORE MMCSS GAMES TASK
+	gamesTaskPath := `SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games`
+	if key, err := registry.OpenKey(registry.LOCAL_MACHINE, gamesTaskPath, registry.SET_VALUE); err == nil {
+		if baseline.GamesTask.AffinityExists {
+			_ = key.SetDWordValue("Affinity", baseline.GamesTask.AffinityValue)
+		} else {
+			_ = key.DeleteValue("Affinity")
+		}
+		if baseline.GamesTask.BackgroundOnlyExists {
+			_ = key.SetStringValue("Background Only", baseline.GamesTask.BackgroundOnlyValue)
+		} else {
+			_ = key.DeleteValue("Background Only")
+		}
+		if baseline.GamesTask.ClockRateExists {
+			_ = key.SetDWordValue("Clock Rate", baseline.GamesTask.ClockRateValue)
+		} else {
+			_ = key.DeleteValue("Clock Rate")
+		}
+		if baseline.GamesTask.GPUPriorityExists {
+			_ = key.SetDWordValue("GPU Priority", baseline.GamesTask.GPUPriorityValue)
+		} else {
+			_ = key.DeleteValue("GPU Priority")
+		}
+		if baseline.GamesTask.PriorityExists {
+			_ = key.SetDWordValue("Priority", baseline.GamesTask.PriorityValue)
+		} else {
+			_ = key.DeleteValue("Priority")
+		}
+		if baseline.GamesTask.SchedulingCategoryExists {
+			_ = key.SetStringValue("Scheduling Category", baseline.GamesTask.SchedulingCategoryValue)
+		} else {
+			_ = key.DeleteValue("Scheduling Category")
+		}
+		if baseline.GamesTask.SFIOPriorityExists {
+			_ = key.SetStringValue("SFIO Priority", baseline.GamesTask.SFIOPriorityValue)
+		} else {
+			_ = key.DeleteValue("SFIO Priority")
 		}
 		key.Close()
 	}
