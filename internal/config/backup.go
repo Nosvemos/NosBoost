@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"time"
 
 	"golang.org/x/sys/windows"
@@ -152,11 +153,39 @@ func SaveBaselineState() (*SystemBaselineState, error) {
 		rootKey.Close()
 	}
 
-	// 4. BACK UP ACTIVE POWER SCHEME GUID
+	// 4. BACK UP ACTIVE POWER SCHEME GUID & CORE PARKING SETTINGS
 	powerPath := `SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes`
 	if powerKey, err := registry.OpenKey(registry.LOCAL_MACHINE, powerPath, registry.QUERY_VALUE); err == nil {
 		if scheme, _, err := powerKey.GetStringValue("ActivePowerScheme"); err == nil {
 			baseline.Power.OriginalActiveScheme = scheme
+
+			// Min Cores path
+			minCoresPath := fmt.Sprintf(`%s\%s\54533251-82be-4824-96c1-47b60b740d00\0cc5b647-c1df-4615-815a-8deb02312a2c`, powerPath, scheme)
+			if mcKey, err := registry.OpenKey(registry.LOCAL_MACHINE, minCoresPath, registry.QUERY_VALUE); err == nil {
+				if val, _, err := mcKey.GetIntegerValue("ACSettingIndex"); err == nil {
+					baseline.Power.MinCoresACExists = true
+					baseline.Power.MinCoresACValue = uint32(val)
+				}
+				if val, _, err := mcKey.GetIntegerValue("DCSettingIndex"); err == nil {
+					baseline.Power.MinCoresDCExists = true
+					baseline.Power.MinCoresDCValue = uint32(val)
+				}
+				mcKey.Close()
+			}
+
+			// Max Cores path
+			maxCoresPath := fmt.Sprintf(`%s\%s\54533251-82be-4824-96c1-47b60b740d00\ea062031-0e34-4ff1-9b6d-eb1059334028`, powerPath, scheme)
+			if xcKey, err := registry.OpenKey(registry.LOCAL_MACHINE, maxCoresPath, registry.QUERY_VALUE); err == nil {
+				if val, _, err := xcKey.GetIntegerValue("ACSettingIndex"); err == nil {
+					baseline.Power.MaxCoresACExists = true
+					baseline.Power.MaxCoresACValue = uint32(val)
+				}
+				if val, _, err := xcKey.GetIntegerValue("DCSettingIndex"); err == nil {
+					baseline.Power.MaxCoresDCExists = true
+					baseline.Power.MaxCoresDCValue = uint32(val)
+				}
+				xcKey.Close()
+			}
 		}
 		powerKey.Close()
 	}
@@ -174,6 +203,16 @@ func SaveBaselineState() (*SystemBaselineState, error) {
 			baseline.Services = append(baseline.Services, srvBackup)
 			srvKey.Close()
 		}
+	}
+
+	// 5b. BACK UP WIN32 PRIORITY SEPARATION (CPU QUANTUM)
+	priorityControlPath := `SYSTEM\CurrentControlSet\Control\PriorityControl`
+	if priKey, err := registry.OpenKey(registry.LOCAL_MACHINE, priorityControlPath, registry.QUERY_VALUE); err == nil {
+		if val, _, err := priKey.GetIntegerValue("Win32PrioritySeparation"); err == nil {
+			baseline.Win32PrioritySeparationExist = true
+			baseline.Win32PrioritySeparationValue = uint32(val)
+		}
+		priKey.Close()
 	}
 
 	// 6. SERIALIZE AND WRITE BASELINE STATE TO FILE
@@ -282,13 +321,51 @@ func RestoreBaselineState() error {
 		}
 	}
 
-	// 4. RESTORE ACTIVE POWER SCHEME GUID
+	// 4. RESTORE ACTIVE POWER SCHEME GUID & CORE PARKING SETTINGS
 	if baseline.Power.OriginalActiveScheme != "" {
 		powerPath := `SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes`
 		if powerKey, err := registry.OpenKey(registry.LOCAL_MACHINE, powerPath, registry.SET_VALUE); err == nil {
 			_ = powerKey.SetStringValue("ActivePowerScheme", baseline.Power.OriginalActiveScheme)
 			powerKey.Close()
 		}
+
+		scheme := baseline.Power.OriginalActiveScheme
+
+		// Restore Min Cores
+		minCoresPath := fmt.Sprintf(`%s\%s\54533251-82be-4824-96c1-47b60b740d00\0cc5b647-c1df-4615-815a-8deb02312a2c`, powerPath, scheme)
+		if mcKey, err := registry.OpenKey(registry.LOCAL_MACHINE, minCoresPath, registry.SET_VALUE); err == nil {
+			if baseline.Power.MinCoresACExists {
+				_ = mcKey.SetDWordValue("ACSettingIndex", baseline.Power.MinCoresACValue)
+			} else {
+				_ = mcKey.DeleteValue("ACSettingIndex")
+			}
+			if baseline.Power.MinCoresDCExists {
+				_ = mcKey.SetDWordValue("DCSettingIndex", baseline.Power.MinCoresDCValue)
+			} else {
+				_ = mcKey.DeleteValue("DCSettingIndex")
+			}
+			mcKey.Close()
+		}
+
+		// Restore Max Cores
+		maxCoresPath := fmt.Sprintf(`%s\%s\54533251-82be-4824-96c1-47b60b740d00\ea062031-0e34-4ff1-9b6d-eb1059334028`, powerPath, scheme)
+		if xcKey, err := registry.OpenKey(registry.LOCAL_MACHINE, maxCoresPath, registry.SET_VALUE); err == nil {
+			if baseline.Power.MaxCoresACExists {
+				_ = xcKey.SetDWordValue("ACSettingIndex", baseline.Power.MaxCoresACValue)
+			} else {
+				_ = xcKey.DeleteValue("ACSettingIndex")
+			}
+			if baseline.Power.MaxCoresDCExists {
+				_ = xcKey.SetDWordValue("DCSettingIndex", baseline.Power.MaxCoresDCValue)
+			} else {
+				_ = xcKey.DeleteValue("DCSettingIndex")
+			}
+			xcKey.Close()
+		}
+
+		// Reload power configuration to apply
+		cmd := exec.Command("powercfg", "/s", scheme)
+		_ = cmd.Run()
 	}
 
 	// 5. RESTORE SERVICE STATES
@@ -302,6 +379,17 @@ func RestoreBaselineState() error {
 			}
 			srvKey.Close()
 		}
+	}
+
+	// 5b. RESTORE WIN32 PRIORITY SEPARATION
+	priorityControlPath := `SYSTEM\CurrentControlSet\Control\PriorityControl`
+	if priKey, err := registry.OpenKey(registry.LOCAL_MACHINE, priorityControlPath, registry.SET_VALUE); err == nil {
+		if baseline.Win32PrioritySeparationExist {
+			_ = priKey.SetDWordValue("Win32PrioritySeparation", baseline.Win32PrioritySeparationValue)
+		} else {
+			_ = priKey.DeleteValue("Win32PrioritySeparation")
+		}
+		priKey.Close()
 	}
 
 	return nil

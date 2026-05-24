@@ -30,6 +30,14 @@ type NetworkBackupState struct {
 // PowerBackupState holds the original active power plan configuration.
 type PowerBackupState struct {
 	OriginalActiveScheme string `json:"original_active_scheme"`
+	MinCoresACExists     bool   `json:"min_cores_ac_exists"`
+	MinCoresACValue      uint32 `json:"min_cores_ac_value"`
+	MinCoresDCExists     bool   `json:"min_cores_dc_exists"`
+	MinCoresDCValue      uint32 `json:"min_cores_dc_value"`
+	MaxCoresACExists     bool   `json:"max_cores_ac_exists"`
+	MaxCoresACValue      uint32 `json:"max_cores_ac_value"`
+	MaxCoresDCExists     bool   `json:"max_cores_dc_exists"`
+	MaxCoresDCValue      uint32 `json:"max_cores_dc_value"`
 }
 
 // ServiceBackupState represents the service state and startup parameters for target background services.
@@ -41,11 +49,13 @@ type ServiceBackupState struct {
 
 // SystemBaselineState is the primary container for a full restoration point of the Windows OS.
 type SystemBaselineState struct {
-	Version   string               `json:"version"`
-	Timestamp string               `json:"timestamp"`
-	Devices   []DeviceBackupState  `json:"devices"`
-	Network   NetworkBackupState   `json:"network"`
-	Power     PowerBackupState     `json:"power"`
-	Services  []ServiceBackupState `json:"services"`
+	Version                      string               `json:"version"`
+	Timestamp                    string               `json:"timestamp"`
+	Devices                      []DeviceBackupState  `json:"devices"`
+	Network                      NetworkBackupState   `json:"network"`
+	Power                        PowerBackupState     `json:"power"`
+	Services                     []ServiceBackupState `json:"services"`
+	Win32PrioritySeparationExist bool                 `json:"win32_priority_separation_exist"`
+	Win32PrioritySeparationValue uint32               `json:"win32_priority_separation_value"`
 }
 const BackupFileName = "state_backup.json"
