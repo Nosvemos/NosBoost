@@ -1,0 +1,200 @@
+package network
+
+import (
+	"errors"
+	"fmt"
+	"net"
+
+	"nosboost/internal/config"
+
+	"golang.org/x/sys/windows/registry"
+)
+
+const (
+	TcpipInterfacesKey = `SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces`
+	SystemProfileKey   = `SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile`
+)
+
+// ActiveNICInfo holds the active online network interface details.
+type ActiveNICInfo struct {
+	GUID           string
+	IPAddress      string
+	DefaultGateway string
+}
+
+// GetActiveLocalIPs retrieves a list of all active online IPv4 addresses on the host.
+func GetActiveLocalIPs() (map[string]bool, error) {
+	ips := make(map[string]bool)
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read interface addresses: %w", err)
+	}
+
+	for _, addr := range addrs {
+		if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+			if ipnet.IP.To4() != nil {
+				ips[ipnet.IP.String()] = true
+			}
+		}
+	}
+	return ips, nil
+}
+
+// DiscoverActiveNIC scans the Tcpip Interfaces registry tree, correlating IP addresses
+// against online unicast IPs to return the active interface GUID and default gateway.
+func DiscoverActiveNIC() (*ActiveNICInfo, error) {
+	activeIPs, err := GetActiveLocalIPs()
+	if err != nil {
+		return nil, err
+	}
+
+	rootKey, err := registry.OpenKey(registry.LOCAL_MACHINE, TcpipInterfacesKey, registry.READ)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open Tcpip Interfaces registry: %w", err)
+	}
+	defer rootKey.Close()
+
+	guids, err := rootKey.ReadSubKeyNames(-1)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read interface GUID keys: %w", err)
+	}
+
+	for _, guid := range guids {
+		nicPath := TcpipInterfacesKey + `\` + guid
+		nicKey, err := registry.OpenKey(registry.LOCAL_MACHINE, nicPath, registry.QUERY_VALUE)
+		if err != nil {
+			continue
+		}
+
+		// 1. Resolve active IP address (can be REG_SZ or REG_MULTI_SZ)
+		var ipStr string
+		if ipVal, _, err := nicKey.GetStringValue("DhcpIPAddress"); err == nil && ipVal != "" {
+			ipStr = ipVal
+		} else if ips, _, err := nicKey.GetStringsValue("IPAddress"); err == nil && len(ips) > 0 && ips[0] != "0.0.0.0" {
+			ipStr = ips[0]
+		}
+
+		// 2. Correlate registry IP to online active IPs
+		if ipStr != "" && activeIPs[ipStr] {
+			info := &ActiveNICInfo{
+				GUID:      guid,
+				IPAddress: ipStr,
+			}
+
+			// 3. Resolve active gateway IP
+			if gwVal, _, err := nicKey.GetStringValue("DhcpDefaultGateway"); err == nil && gwVal != "" {
+				info.DefaultGateway = gwVal
+			} else if gws, _, err := nicKey.GetStringsValue("DefaultGateway"); err == nil && len(gws) > 0 && gws[0] != "" {
+				info.DefaultGateway = gws[0]
+			}
+
+			nicKey.Close()
+			return info, nil
+		}
+
+		nicKey.Close()
+	}
+
+	return nil, errors.New("active online network adapter registry entry not found")
+}
+
+// InjectTCPNoDelay configures immediately-flushed network sockets and elevations for the active adapter.
+func InjectTCPNoDelay() error {
+	nic, err := DiscoverActiveNIC()
+	if err != nil {
+		return fmt.Errorf("failed to discover active adapter: %w", err)
+	}
+
+	// 1. Enforce TcpAckFrequency & TCPNoDelay under the active adapter key
+	nicPath := TcpipInterfacesKey + `\` + nic.GUID
+	nicKey, err := registry.OpenKey(registry.LOCAL_MACHINE, nicPath, registry.SET_VALUE)
+	if err != nil {
+		return fmt.Errorf("failed to open active adapter registry key: %w", err)
+	}
+	defer nicKey.Close()
+
+	if err := nicKey.SetDWordValue("TcpAckFrequency", 1); err != nil {
+		return fmt.Errorf("failed to set TcpAckFrequency: %w", err)
+	}
+	if err := nicKey.SetDWordValue("TCPNoDelay", 1); err != nil {
+		return fmt.Errorf("failed to set TCPNoDelay: %w", err)
+	}
+
+	// 2. Enforce system responsiveness priority tweaks under HKLM Multimedia SystemProfile
+	profileKey, err := registry.OpenKey(registry.LOCAL_MACHINE, SystemProfileKey, registry.SET_VALUE)
+	if err != nil {
+		return fmt.Errorf("failed to open SystemProfile registry key: %w", err)
+	}
+	defer profileKey.Close()
+
+	if err := profileKey.SetDWordValue("NetworkThrottlingIndex", 0xffffffff); err != nil {
+		return fmt.Errorf("failed to disable NetworkThrottlingIndex: %w", err)
+	}
+	if err := profileKey.SetDWordValue("SystemResponsiveness", 0); err != nil {
+		return fmt.Errorf("failed to set SystemResponsiveness priority: %w", err)
+	}
+
+	return nil
+}
+
+// RevertTCPNoDelay restores active NIC latency parameters from the recorded baseline state.
+func RevertTCPNoDelay() error {
+	nic, err := DiscoverActiveNIC()
+	if err != nil {
+		return fmt.Errorf("failed to discover active adapter: %w", err)
+	}
+
+	baseline, err := config.LoadBaselineState()
+	if err != nil {
+		return fmt.Errorf("failed to load baseline state: %w", err)
+	}
+
+	// 1. Revert active adapter TCP values
+	nicPath := TcpipInterfacesKey + `\` + nic.GUID
+	nicKey, err := registry.OpenKey(registry.LOCAL_MACHINE, nicPath, registry.SET_VALUE)
+	if err == nil {
+		// Look up original backup values for this GUID
+		var foundOriginal bool
+		for _, originalNic := range baseline.Network.NICs {
+			if originalNic.InterfaceGUID == nic.GUID {
+				foundOriginal = true
+				if originalNic.TcpAckFrequencyExists {
+					_ = nicKey.SetDWordValue("TcpAckFrequency", originalNic.TcpAckFrequencyValue)
+				} else {
+					_ = nicKey.DeleteValue("TcpAckFrequency")
+				}
+				if originalNic.TCPNoDelayExists {
+					_ = nicKey.SetDWordValue("TCPNoDelay", originalNic.TCPNoDelayValue)
+				} else {
+					_ = nicKey.DeleteValue("TCPNoDelay")
+				}
+				break
+			}
+		}
+		// If we couldn't find matching GUID backup, delete newly injected parameters
+		if !foundOriginal {
+			_ = nicKey.DeleteValue("TcpAckFrequency")
+			_ = nicKey.DeleteValue("TCPNoDelay")
+		}
+		nicKey.Close()
+	}
+
+	// 2. Revert System Profile values
+	profileKey, err := registry.OpenKey(registry.LOCAL_MACHINE, SystemProfileKey, registry.SET_VALUE)
+	if err == nil {
+		if baseline.Network.NetworkThrottlingExists {
+			_ = profileKey.SetDWordValue("NetworkThrottlingIndex", baseline.Network.NetworkThrottlingValue)
+		} else {
+			_ = profileKey.DeleteValue("NetworkThrottlingIndex")
+		}
+
+		if baseline.Network.SystemResponsivenessExists {
+			_ = profileKey.SetDWordValue("SystemResponsiveness", baseline.Network.SystemResponsivenessValue)
+		} else {
+			_ = profileKey.DeleteValue("SystemResponsiveness")
+		}
+		profileKey.Close()
+	}
+
+	return nil
+}

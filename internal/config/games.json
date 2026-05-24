@@ -1,0 +1,25 @@
+{
+  "games": [
+    {
+      "name": "Riot Games Hubs (Valorant, League of Legends)",
+      "subnets": [
+        "162.249.72.0/22",
+        "192.207.0.0/16"
+      ]
+    },
+    {
+      "name": "Valve Esports Hubs (CS2, Dota 2)",
+      "subnets": [
+        "155.133.0.0/16",
+        "162.254.0.0/16"
+      ]
+    },
+    {
+      "name": "FaceIt & Apex Legends Clusters",
+      "subnets": [
+        "104.22.28.0/24",
+        "172.65.202.0/24"
+      ]
+    }
+  ]
+}
