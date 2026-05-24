@@ -27,6 +27,9 @@ var (
 	currentModeMutex sync.Mutex
 	CurrentMode      = "Safe Default" // "Extreme", "Balanced", "Safe Default"
 
+	// Execution mutex to protect concurrent configuration access
+	orchestrationMutex sync.Mutex
+
 	// Execution contexts for background goroutines
 	cancelPowerLock context.CancelFunc
 	cancelGamePoll  context.CancelFunc
@@ -60,7 +63,7 @@ func logToUI(msg string) {
 	}
 }
 
-// SetCurrentMode retrieves the thread-safe active orchestration mode name.
+// GetCurrentMode retrieves the thread-safe active orchestration mode name.
 func GetCurrentMode() string {
 	currentModeMutex.Lock()
 	defer currentModeMutex.Unlock()
@@ -88,11 +91,15 @@ func stopBackgroundThreads() {
 }
 
 // ApplyExtremeMode executes the complete low-latency performance arsenal.
+// Runs asynchronously with cooperative cancel checks between stages.
 func ApplyExtremeMode() {
+	orchestrationMutex.Lock()
+	defer orchestrationMutex.Unlock()
+
 	currentModeMutex.Lock()
 	if CurrentMode == "Extreme" {
 		currentModeMutex.Unlock()
-		logToUI("⚠️  System already running in Extreme Competitive Mode!")
+		logToUI("[WARNING] System already running in Extreme Competitive Mode!")
 		return
 	}
 	currentModeMutex.Unlock()
@@ -101,16 +108,20 @@ func ApplyExtremeMode() {
 	stopBackgroundThreads()
 	updateCurrentMode("Extreme")
 
-	logToUI("🚀 Initiating EXTREME Competitive Mode Optimization...")
+	logToUI("[SYSTEM] Initiating EXTREME Competitive Mode Optimization...")
 
 	// 1. Deep garbage cleanup
+	if GetCurrentMode() != "Extreme" { return }
 	logToUI("[CLEANER] Running system junk cleaner...")
 	metrics := cleaner.ExecuteDeepCleanup()
+	
+	if GetCurrentMode() != "Extreme" { return }
 	freedMB := float64(metrics.BytesFreed) / (1024 * 1024)
 	logToUI(fmt.Sprintf("[CLEANER] Junk cleanup complete. Deleted %d files (%.2f MB freed). Skipped %d locked files.", 
 		metrics.FilesDeleted, freedMB, metrics.FilesSkipped))
 
 	// 2. CPU Core Parking Elimination
+	if GetCurrentMode() != "Extreme" { return }
 	logToUI("[BOOSTER] Eliminating CPU Core Parking limits...")
 	if err := booster.EnableCoreParkingElimination(); err == nil {
 		logToUI("[BOOSTER] Core parking disabled successfully. All CPU cores 100% awake.")
@@ -119,6 +130,7 @@ func ApplyExtremeMode() {
 	}
 
 	// 3. Process Priorityseparation (Quantum override)
+	if GetCurrentMode() != "Extreme" { return }
 	logToUI("[BOOSTER] Tuning Win32 Priority Separation to short-variable gaming index (0x26)...")
 	if err := booster.OptimizePrioritySeparation(); err == nil {
 		logToUI("[BOOSTER] Foreground quantum separation optimized.")
@@ -127,9 +139,10 @@ func ApplyExtremeMode() {
 	}
 
 	// 4. Power Plan Settings
+	if GetCurrentMode() != "Extreme" { return }
 	logToUI("[POWER] Elevating system power plan to Ultimate Performance...")
 	if err := syswatch.EnableUltimatePowerPlan(); err == nil {
-		logToUI("[POWER] Ultimate power plan activated.")
+		logToUI(fmt.Sprintf("[POWER] Power plan locked to active target: %s.", syswatch.ActiveTargetScheme))
 		ctx, cancel := context.WithCancel(context.Background())
 		cancelPowerLock = cancel
 		orchestratorWG.Add(1)
@@ -143,6 +156,7 @@ func ApplyExtremeMode() {
 	}
 
 	// 5. Network Tuning (TCP NoDelay + Static Route injections)
+	if GetCurrentMode() != "Extreme" { return }
 	logToUI("[NETWORK] Injecting low-latency TCP NoDelay registry parameters...")
 	if err := network.InjectTCPNoDelay(); err == nil {
 		logToUI("[NETWORK] TCP ACK Frequency & TCP NoDelay set to instant fire.")
@@ -150,6 +164,7 @@ func ApplyExtremeMode() {
 		logToUI(fmt.Sprintf("[WARNING] TCP registry injection failed: %v", err))
 	}
 
+	if GetCurrentMode() != "Extreme" { return }
 	logToUI("[NETWORK] Loading esports regional servers and injecting static route bypasses...")
 	if routes, err := network.InjectGameRoutes(); err == nil {
 		injectedRoutes = routes
@@ -159,6 +174,7 @@ func ApplyExtremeMode() {
 	}
 
 	// 6. MSI Interrupt Modes & Timers
+	if GetCurrentMode() != "Extreme" { return }
 	logToUI("[HARDWARE] Discovering display and network adapters for Message Signaled Interrupts (MSI)...")
 	if err := hardware.EnableMSIMode(); err == nil {
 		logToUI("[HARDWARE] MSI mode conversion completed. Hardware priority raised to High.")
@@ -166,6 +182,7 @@ func ApplyExtremeMode() {
 		logToUI(fmt.Sprintf("[WARNING] MSI conversion utility encountered errors: %v", err))
 	}
 
+	if GetCurrentMode() != "Extreme" { return }
 	logToUI("[HARDWARE] Optimizing peripheral input report buffer queues...")
 	if err := hardware.TunePeripheralBuffers(); err == nil {
 		logToUI("[HARDWARE] Mouse and Keyboard queue buffers streamlined to 20 reports.")
@@ -173,6 +190,7 @@ func ApplyExtremeMode() {
 		logToUI(fmt.Sprintf("[WARNING] Peripheral buffers optimization failed: %v", err))
 	}
 
+	if GetCurrentMode() != "Extreme" { return }
 	logToUI("[HARDWARE] Invariant platform clocks configuration check...")
 	if err := hardware.OptimizeSystemTimers(); err == nil {
 		logToUI("[HARDWARE] Kernel timers locked to high-precision hardware clocks (TSC enabled).")
@@ -180,7 +198,8 @@ func ApplyExtremeMode() {
 		logToUI(fmt.Sprintf("[WARNING] Boot timer configuration update failed: %v", err))
 	}
 
-	// 7. Freeze aggressive telemetry process cycles (Extreme Only)
+	// 7. Freeze aggressive telemetry service cycles (Extreme Only)
+	if GetCurrentMode() != "Extreme" { return }
 	logToUI("[SYSWATCH] Freezing background telemetry and diagnostic services...")
 	if count, err := syswatch.SuspendBackgroundServices(); err == nil {
 		servicesFrozen = true
@@ -190,11 +209,13 @@ func ApplyExtremeMode() {
 	}
 
 	// 8. Memory list purging & SysMain disable
+	if GetCurrentMode() != "Extreme" { return }
 	logToUI("[MEMORY] Sweeping cache memory pages & standby list files...")
 	_ = memory.PurgeStandbyList()
 	_ = memory.FlushModifiedList()
 	logToUI("[MEMORY] Standby and modified list pages cleared. Available physical RAM maximized.")
 
+	if GetCurrentMode() != "Extreme" { return }
 	logToUI("[MEMORY] Stopping service SysMain to disable background cache analysis...")
 	if err := memory.DisableSysMain(); err == nil {
 		logToUI("[MEMORY] SysMain caching stopped and startup set to Disabled.")
@@ -203,20 +224,24 @@ func ApplyExtremeMode() {
 	}
 
 	// 9. Startup background game polling
+	if GetCurrentMode() != "Extreme" { return }
 	ctx, cancel := context.WithCancel(context.Background())
 	cancelGamePoll = cancel
 	orchestratorWG.Add(1)
 	go startHybridGamePoller(ctx, true)
 
-	logToUI("⚡ EXTREME Optimization Matrix is fully operational. Scanning for game launch...")
+	logToUI("[SYSTEM] EXTREME Optimization Matrix is fully operational. Scanning for game launch...")
 }
 
 // ApplyBalancedMode executes optimized power, memory, and network settings while keeping multitasking active.
 func ApplyBalancedMode() {
+	orchestrationMutex.Lock()
+	defer orchestrationMutex.Unlock()
+
 	currentModeMutex.Lock()
 	if CurrentMode == "Balanced" {
 		currentModeMutex.Unlock()
-		logToUI("⚠️  System already running in Balanced Gaming Mode!")
+		logToUI("[WARNING] System already running in Balanced Gaming Mode!")
 		return
 	}
 	currentModeMutex.Unlock()
@@ -225,29 +250,35 @@ func ApplyBalancedMode() {
 	stopBackgroundThreads()
 	updateCurrentMode("Balanced")
 
-	logToUI("🚀 Initiating BALANCED Gaming Mode Optimization...")
+	logToUI("[SYSTEM] Initiating BALANCED Gaming Mode Optimization...")
 
 	// 1. Deep garbage cleanup
+	if GetCurrentMode() != "Balanced" { return }
 	logToUI("[CLEANER] Running system junk cleaner...")
 	metrics := cleaner.ExecuteDeepCleanup()
+	
+	if GetCurrentMode() != "Balanced" { return }
 	freedMB := float64(metrics.BytesFreed) / (1024 * 1024)
 	logToUI(fmt.Sprintf("[CLEANER] Junk cleanup complete. Deleted %d files (%.2f MB freed).", 
 		metrics.FilesDeleted, freedMB))
 
 	// 2. CPU Core Parking Elimination
+	if GetCurrentMode() != "Balanced" { return }
 	logToUI("[BOOSTER] Eliminating CPU Core Parking limits...")
 	if err := booster.EnableCoreParkingElimination(); err == nil {
 		logToUI("[BOOSTER] Core parking disabled successfully. All CPU cores 100% awake.")
 	}
 
 	// 3. Process Priorityseparation (Quantum override)
+	if GetCurrentMode() != "Balanced" { return }
 	logToUI("[BOOSTER] Tuning Win32 Priority Separation to short-variable gaming index (0x26)...")
 	_ = booster.OptimizePrioritySeparation()
 
 	// 4. Power Plan Settings
+	if GetCurrentMode() != "Balanced" { return }
 	logToUI("[POWER] Elevating system power plan to Ultimate Performance...")
 	if err := syswatch.EnableUltimatePowerPlan(); err == nil {
-		logToUI("[POWER] Ultimate power plan activated.")
+		logToUI(fmt.Sprintf("[POWER] Power plan locked to active target: %s.", syswatch.ActiveTargetScheme))
 		ctx, cancel := context.WithCancel(context.Background())
 		cancelPowerLock = cancel
 		orchestratorWG.Add(1)
@@ -258,9 +289,11 @@ func ApplyBalancedMode() {
 	}
 
 	// 5. Network Tuning (TCP NoDelay + Routes)
+	if GetCurrentMode() != "Balanced" { return }
 	logToUI("[NETWORK] Injecting low-latency TCP NoDelay registry parameters...")
 	_ = network.InjectTCPNoDelay()
 
+	if GetCurrentMode() != "Balanced" { return }
 	logToUI("[NETWORK] Loading esports regional servers and injecting static route bypasses...")
 	if routes, err := network.InjectGameRoutes(); err == nil {
 		injectedRoutes = routes
@@ -268,42 +301,52 @@ func ApplyBalancedMode() {
 	}
 
 	// 6. MSI Interrupt Modes & Timers
+	if GetCurrentMode() != "Balanced" { return }
 	logToUI("[HARDWARE] Converting display and network adapters to MSI Mode...")
 	_ = hardware.EnableMSIMode()
 
+	if GetCurrentMode() != "Balanced" { return }
 	logToUI("[HARDWARE] Optimizing peripheral input report buffer queues...")
 	_ = hardware.TunePeripheralBuffers()
 
+	if GetCurrentMode() != "Balanced" { return }
 	logToUI("[HARDWARE] Invariant platform clocks configuration check...")
 	_ = hardware.OptimizeSystemTimers()
 
 	// 7. Freeze background services: SKIPPED in Balanced Mode to permit multitasking
+	if GetCurrentMode() != "Balanced" { return }
 	logToUI("[SYSWATCH] Balanced mode: Skipping background diagnostics suspension to allow multitasking.")
 	servicesFrozen = false
 
 	// 8. Memory list purging & SysMain disable
+	if GetCurrentMode() != "Balanced" { return }
 	logToUI("[MEMORY] Sweeping cache memory pages & standby list files...")
 	_ = memory.PurgeStandbyList()
 	_ = memory.FlushModifiedList()
 
+	if GetCurrentMode() != "Balanced" { return }
 	logToUI("[MEMORY] Stopping service SysMain to disable background cache analysis...")
 	_ = memory.DisableSysMain()
 
 	// 9. Startup background game polling (Balanced mode = no aggressive I/O throttling)
+	if GetCurrentMode() != "Balanced" { return }
 	ctx, cancel := context.WithCancel(context.Background())
 	cancelGamePoll = cancel
 	orchestratorWG.Add(1)
 	go startHybridGamePoller(ctx, false)
 
-	logToUI("⚡ BALANCED Gaming Optimization Matrix is active. Scanning for game launch...")
+	logToUI("[SYSTEM] BALANCED Gaming Optimization Matrix is active. Scanning for game launch...")
 }
 
 // ApplyTotalRestore reverts all optimizations and rollbacks the system to exact original state.
 func ApplyTotalRestore() {
+	orchestrationMutex.Lock()
+	defer orchestrationMutex.Unlock()
+
 	currentModeMutex.Lock()
 	if CurrentMode == "Safe Default" {
 		currentModeMutex.Unlock()
-		logToUI("⚠️  System already running in Safe Default mode.")
+		logToUI("[WARNING] System already running in Safe Default mode.")
 		return
 	}
 	currentModeMutex.Unlock()
@@ -312,7 +355,7 @@ func ApplyTotalRestore() {
 	stopBackgroundThreads()
 	updateCurrentMode("Safe Default")
 
-	logToUI("🛡️  Initiating TOTAL RESTORE Rollback to baseline configurations...")
+	logToUI("[RESTORE] Initiating TOTAL RESTORE Rollback to baseline configurations...")
 
 	// 1. Restore baseline state values (MSI, network values, core parking, priorities, services)
 	logToUI("[RESTORE] Rolling back system registry parameters from transaction snapshot...")
@@ -385,7 +428,7 @@ func ApplyTotalRestore() {
 	booster.RestoreAffinities(0, 0)
 	cleaner.RestoreBackgroundIO()
 
-	logToUI("✅ TOTAL RESTORE Complete. System is restored to its baseline default configuration.")
+	logToUI("[RESTORE] TOTAL RESTORE Complete. System is restored to baseline defaults.")
 }
 
 // findRunningGame scans active processes for configured target games.
@@ -422,7 +465,7 @@ func findRunningGame() (uint32, string, bool) {
 	return 0, "", false
 }
 
-// startHybridGamePoller runs an intelligent process watcher. Upon game discovery, it open a
+// startHybridGamePoller runs an intelligent process watcher. Upon game discovery, it opens a
 // synchronized process handle, applies game-specific optimizations, and blocks via WaitForSingleObject
 // until the game exits before cleanly restoring states.
 func startHybridGamePoller(ctx context.Context, isExtreme bool) {

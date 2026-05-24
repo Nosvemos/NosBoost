@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os/exec"
+	"strings"
 
 	"nosboost/internal/config"
 
@@ -88,6 +90,13 @@ func DiscoverActiveNIC() (*ActiveNICInfo, error) {
 				info.DefaultGateway = gws[0]
 			}
 
+			// Fallback: If gateway is empty in the registry, parse from routing table
+			if info.DefaultGateway == "" {
+				if gwFallback, err := getDefaultGatewayFallback(); err == nil && gwFallback != "" {
+					info.DefaultGateway = gwFallback
+				}
+			}
+
 			nicKey.Close()
 			return info, nil
 		}
@@ -96,6 +105,29 @@ func DiscoverActiveNIC() (*ActiveNICInfo, error) {
 	}
 
 	return nil, errors.New("active online network adapter registry entry not found")
+}
+
+// getDefaultGatewayFallback queries the system routing table for the default route to extract the gateway IP.
+func getDefaultGatewayFallback() (string, error) {
+	cmd := exec.Command("route", "print", "0.0.0.0")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+
+	lines := strings.Split(string(out), "\n")
+	for _, line := range lines {
+		fields := strings.Fields(line)
+		if len(fields) >= 4 {
+			if fields[0] == "0.0.0.0" && fields[1] == "0.0.0.0" {
+				gw := fields[2]
+				if net.ParseIP(gw) != nil {
+					return gw, nil
+				}
+			}
+		}
+	}
+	return "", fmt.Errorf("default gateway route not found in routing table")
 }
 
 // InjectTCPNoDelay configures immediately-flushed network sockets and elevations for the active adapter.

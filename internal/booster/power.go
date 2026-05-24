@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"strconv"
 
 	"nosboost/internal/config"
 
@@ -34,37 +35,23 @@ func getActiveScheme() (string, error) {
 
 // EnableCoreParkingElimination forces the minimum and maximum CPU core limits to 100%
 // for the currently active power scheme, permanently keeping all physical/logical cores awake.
+// Uses powercfg command-line calls to bypass strict SYSTEM registry write blocks.
 func EnableCoreParkingElimination() error {
 	scheme, err := getActiveScheme()
 	if err != nil {
 		return fmt.Errorf("failed to detect active power plan: %w", err)
 	}
 
-	powerPath := `SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes`
-	
-	// 1. Force Min Cores to 100
-	minPath := fmt.Sprintf(`%s\%s\%s\%s`, powerPath, scheme, ProcessorSubgroup, MinCoresSetting)
-	minKey, _, err := registry.CreateKey(registry.LOCAL_MACHINE, minPath, registry.SET_VALUE)
-	if err != nil {
-		return fmt.Errorf("failed to open min cores power setting registry key: %w", err)
-	}
-	_ = minKey.SetDWordValue("ACSettingIndex", 100)
-	_ = minKey.SetDWordValue("DCSettingIndex", 100)
-	minKey.Close()
+	// 1. Force Min Cores to 100 (AC and DC)
+	_ = exec.Command("powercfg", "/setacvalueindex", scheme, ProcessorSubgroup, MinCoresSetting, "100").Run()
+	_ = exec.Command("powercfg", "/setdcvalueindex", scheme, ProcessorSubgroup, MinCoresSetting, "100").Run()
 
-	// 2. Force Max Cores to 100
-	maxPath := fmt.Sprintf(`%s\%s\%s\%s`, powerPath, scheme, ProcessorSubgroup, MaxCoresSetting)
-	maxKey, _, err := registry.CreateKey(registry.LOCAL_MACHINE, maxPath, registry.SET_VALUE)
-	if err != nil {
-		return fmt.Errorf("failed to open max cores power setting registry key: %w", err)
-	}
-	_ = maxKey.SetDWordValue("ACSettingIndex", 100)
-	_ = maxKey.SetDWordValue("DCSettingIndex", 100)
-	maxKey.Close()
+	// 2. Force Max Cores to 100 (AC and DC)
+	_ = exec.Command("powercfg", "/setacvalueindex", scheme, ProcessorSubgroup, MaxCoresSetting, "100").Run()
+	_ = exec.Command("powercfg", "/setdcvalueindex", scheme, ProcessorSubgroup, MaxCoresSetting, "100").Run()
 
-	// 3. Trigger Windows to reload active power scheme index immediately
-	cmd := exec.Command("powercfg", "/s", scheme)
-	if err := cmd.Run(); err != nil {
+	// 3. Trigger Windows to reload active power scheme index immediately to apply
+	if err := exec.Command("powercfg", "/setactive", scheme).Run(); err != nil {
 		return fmt.Errorf("failed to reload active power configuration scheme: %w", err)
 	}
 
@@ -72,7 +59,7 @@ func EnableCoreParkingElimination() error {
 }
 
 // DisableCoreParkingElimination restores the original core parking settings of the active
-// power scheme from our local baseline configuration database.
+// power scheme from our local baseline configuration database using powercfg utility.
 func DisableCoreParkingElimination() error {
 	scheme, err := getActiveScheme()
 	if err != nil {
@@ -84,52 +71,29 @@ func DisableCoreParkingElimination() error {
 		return fmt.Errorf("failed to load baseline state: %w", err)
 	}
 
-	// Validate baseline power information is matching the target scheme
+	// Validate baseline power information matches the target scheme
 	if baseline.Power.OriginalActiveScheme != scheme {
 		return errors.New("cannot restore core parking: active power plan differs from recorded baseline")
 	}
 
-	powerPath := `SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes`
-
 	// 1. Restore original Min Cores values
-	minPath := fmt.Sprintf(`%s\%s\%s\%s`, powerPath, scheme, ProcessorSubgroup, MinCoresSetting)
-	minKey, err := registry.OpenKey(registry.LOCAL_MACHINE, minPath, registry.SET_VALUE)
-	if err == nil {
-		if baseline.Power.MinCoresACExists {
-			_ = minKey.SetDWordValue("ACSettingIndex", baseline.Power.MinCoresACValue)
-		} else {
-			_ = minKey.DeleteValue("ACSettingIndex")
-		}
-
-		if baseline.Power.MinCoresDCExists {
-			_ = minKey.SetDWordValue("DCSettingIndex", baseline.Power.MinCoresDCValue)
-		} else {
-			_ = minKey.DeleteValue("DCSettingIndex")
-		}
-		minKey.Close()
+	if baseline.Power.MinCoresACExists {
+		_ = exec.Command("powercfg", "/setacvalueindex", scheme, ProcessorSubgroup, MinCoresSetting, strconv.FormatUint(uint64(baseline.Power.MinCoresACValue), 10)).Run()
+	}
+	if baseline.Power.MinCoresDCExists {
+		_ = exec.Command("powercfg", "/setdcvalueindex", scheme, ProcessorSubgroup, MinCoresSetting, strconv.FormatUint(uint64(baseline.Power.MinCoresDCValue), 10)).Run()
 	}
 
 	// 2. Restore original Max Cores values
-	maxPath := fmt.Sprintf(`%s\%s\%s\%s`, powerPath, scheme, ProcessorSubgroup, MaxCoresSetting)
-	maxKey, err := registry.OpenKey(registry.LOCAL_MACHINE, maxPath, registry.SET_VALUE)
-	if err == nil {
-		if baseline.Power.MaxCoresACExists {
-			_ = maxKey.SetDWordValue("ACSettingIndex", baseline.Power.MaxCoresACValue)
-		} else {
-			_ = maxKey.DeleteValue("ACSettingIndex")
-		}
-
-		if baseline.Power.MaxCoresDCExists {
-			_ = maxKey.SetDWordValue("DCSettingIndex", baseline.Power.MaxCoresDCValue)
-		} else {
-			_ = maxKey.DeleteValue("DCSettingIndex")
-		}
-		maxKey.Close()
+	if baseline.Power.MaxCoresACExists {
+		_ = exec.Command("powercfg", "/setacvalueindex", scheme, ProcessorSubgroup, MaxCoresSetting, strconv.FormatUint(uint64(baseline.Power.MaxCoresACValue), 10)).Run()
+	}
+	if baseline.Power.MaxCoresDCExists {
+		_ = exec.Command("powercfg", "/setdcvalueindex", scheme, ProcessorSubgroup, MaxCoresSetting, strconv.FormatUint(uint64(baseline.Power.MaxCoresDCValue), 10)).Run()
 	}
 
 	// 3. Trigger Windows to reload active power scheme index immediately
-	cmd := exec.Command("powercfg", "/s", scheme)
-	_ = cmd.Run()
+	_ = exec.Command("powercfg", "/setactive", scheme).Run()
 
 	return nil
 }

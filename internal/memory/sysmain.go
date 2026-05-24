@@ -30,9 +30,8 @@ func DisableSysMain() error {
 	}
 
 	if config.StartType != mgr.StartDisabled {
-		err = s.UpdateConfig(mgr.Config{
-			StartType: mgr.StartDisabled,
-		})
+		config.StartType = mgr.StartDisabled
+		err = s.UpdateConfig(config)
 		if err != nil {
 			return fmt.Errorf("failed to disable SysMain startup type: %w", err)
 		}
@@ -87,9 +86,12 @@ func RestoreSysMain(originalStartType uint32, wasRunning bool) error {
 	defer s.Close()
 
 	// 1. Restore startup type
-	err = s.UpdateConfig(mgr.Config{
-		StartType: originalStartType,
-	})
+	config, err := s.Config()
+	if err != nil {
+		return fmt.Errorf("failed to query SysMain service config: %w", err)
+	}
+	config.StartType = originalStartType
+	err = s.UpdateConfig(config)
 	if err != nil {
 		return fmt.Errorf("failed to restore SysMain start configuration: %w", err)
 	}

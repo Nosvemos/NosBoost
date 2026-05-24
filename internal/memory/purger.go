@@ -28,7 +28,8 @@ var (
 
 // SetTokenPrivilege programmatically enables or disables specific security privileges in our current token.
 func SetTokenPrivilege(privilegeName string, enable bool) error {
-	token, err := windows.OpenCurrentProcessToken()
+	var token windows.Token
+	err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_ADJUST_PRIVILEGES|windows.TOKEN_QUERY, &token)
 	if err != nil {
 		return fmt.Errorf("failed to open current process token: %w", err)
 	}
