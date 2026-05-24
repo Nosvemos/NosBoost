@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"os/exec"
 	"time"
+
+	"nosboost/internal/system"
 
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
@@ -430,8 +431,7 @@ func RestoreBaselineState() error {
 		}
 
 		// Reload power configuration to apply
-		cmd := exec.Command("powercfg", "/s", scheme)
-		_ = cmd.Run()
+		_ = system.Exec("powercfg", "/s", scheme)
 	}
 
 	// 5. RESTORE SERVICE STATES

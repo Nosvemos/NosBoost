@@ -3,7 +3,7 @@
   "theme_dark": "Dark Mode",
   "theme_light": "Light Mode",
   "app_title": "NosBoost",
-  "subtitle": "High-Performance Windows Kernel Latency Engine // Production Release v1.0.0",
+  "subtitle": "High-Performance Windows Kernel Latency Engine // Production Release %s",
   "ram_health": "PHYSICAL MEMORY HEALTH",
   "allocated_ram": "Allocated RAM: %s",
   "clean_mem": "CLEAN MEMORY",

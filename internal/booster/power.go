@@ -3,10 +3,10 @@ package booster
 import (
 	"errors"
 	"fmt"
-	"os/exec"
 	"strconv"
 
 	"nosboost/internal/config"
+	"nosboost/internal/system"
 
 	"golang.org/x/sys/windows/registry"
 )
@@ -43,15 +43,15 @@ func EnableCoreParkingElimination() error {
 	}
 
 	// 1. Force Min Cores to 100 (AC and DC)
-	_ = exec.Command("powercfg", "/setacvalueindex", scheme, ProcessorSubgroup, MinCoresSetting, "100").Run()
-	_ = exec.Command("powercfg", "/setdcvalueindex", scheme, ProcessorSubgroup, MinCoresSetting, "100").Run()
+	_ = system.Exec("powercfg", "/setacvalueindex", scheme, ProcessorSubgroup, MinCoresSetting, "100")
+	_ = system.Exec("powercfg", "/setdcvalueindex", scheme, ProcessorSubgroup, MinCoresSetting, "100")
 
 	// 2. Force Max Cores to 100 (AC and DC)
-	_ = exec.Command("powercfg", "/setacvalueindex", scheme, ProcessorSubgroup, MaxCoresSetting, "100").Run()
-	_ = exec.Command("powercfg", "/setdcvalueindex", scheme, ProcessorSubgroup, MaxCoresSetting, "100").Run()
+	_ = system.Exec("powercfg", "/setacvalueindex", scheme, ProcessorSubgroup, MaxCoresSetting, "100")
+	_ = system.Exec("powercfg", "/setdcvalueindex", scheme, ProcessorSubgroup, MaxCoresSetting, "100")
 
 	// 3. Trigger Windows to reload active power scheme index immediately to apply
-	if err := exec.Command("powercfg", "/setactive", scheme).Run(); err != nil {
+	if err := system.Exec("powercfg", "/setactive", scheme); err != nil {
 		return fmt.Errorf("failed to reload active power configuration scheme: %w", err)
 	}
 
@@ -78,22 +78,22 @@ func DisableCoreParkingElimination() error {
 
 	// 1. Restore original Min Cores values
 	if baseline.Power.MinCoresACExists {
-		_ = exec.Command("powercfg", "/setacvalueindex", scheme, ProcessorSubgroup, MinCoresSetting, strconv.FormatUint(uint64(baseline.Power.MinCoresACValue), 10)).Run()
+		_ = system.Exec("powercfg", "/setacvalueindex", scheme, ProcessorSubgroup, MinCoresSetting, strconv.FormatUint(uint64(baseline.Power.MinCoresACValue), 10))
 	}
 	if baseline.Power.MinCoresDCExists {
-		_ = exec.Command("powercfg", "/setdcvalueindex", scheme, ProcessorSubgroup, MinCoresSetting, strconv.FormatUint(uint64(baseline.Power.MinCoresDCValue), 10)).Run()
+		_ = system.Exec("powercfg", "/setdcvalueindex", scheme, ProcessorSubgroup, MinCoresSetting, strconv.FormatUint(uint64(baseline.Power.MinCoresDCValue), 10))
 	}
 
 	// 2. Restore original Max Cores values
 	if baseline.Power.MaxCoresACExists {
-		_ = exec.Command("powercfg", "/setacvalueindex", scheme, ProcessorSubgroup, MaxCoresSetting, strconv.FormatUint(uint64(baseline.Power.MaxCoresACValue), 10)).Run()
+		_ = system.Exec("powercfg", "/setacvalueindex", scheme, ProcessorSubgroup, MaxCoresSetting, strconv.FormatUint(uint64(baseline.Power.MaxCoresACValue), 10))
 	}
 	if baseline.Power.MaxCoresDCExists {
-		_ = exec.Command("powercfg", "/setdcvalueindex", scheme, ProcessorSubgroup, MaxCoresSetting, strconv.FormatUint(uint64(baseline.Power.MaxCoresDCValue), 10)).Run()
+		_ = system.Exec("powercfg", "/setdcvalueindex", scheme, ProcessorSubgroup, MaxCoresSetting, strconv.FormatUint(uint64(baseline.Power.MaxCoresDCValue), 10))
 	}
 
 	// 3. Trigger Windows to reload active power scheme index immediately
-	_ = exec.Command("powercfg", "/setactive", scheme).Run()
+	_ = system.Exec("powercfg", "/setactive", scheme)
 
 	return nil
 }

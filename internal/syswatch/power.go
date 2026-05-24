@@ -3,8 +3,9 @@ package syswatch
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"time"
+
+	"nosboost/internal/system"
 
 	"golang.org/x/sys/windows/registry"
 )
@@ -33,17 +34,17 @@ var ActiveTargetScheme = UltimateSchemeGUID
 // and locks it to active status. If Ultimate is not supported, it cascades to High Performance.
 func EnableUltimatePowerPlan() error {
 	// 1. Incept/Duplicate Ultimate Performance power scheme if hidden
-	_ = exec.Command("powercfg", "-duplicatescheme", UltimateSchemeGUID).Run()
+	_ = system.Exec("powercfg", "-duplicatescheme", UltimateSchemeGUID)
 
 	// 2. Force activate the Ultimate Performance scheme
-	if err := exec.Command("powercfg", "-setactive", UltimateSchemeGUID).Run(); err == nil {
+	if err := system.Exec("powercfg", "-setactive", UltimateSchemeGUID); err == nil {
 		ActiveTargetScheme = UltimateSchemeGUID
 		return nil
 	}
 
 	// 3. Fallback to High Performance scheme (Standard)
 	highPerformanceGUID := "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c"
-	if err := exec.Command("powercfg", "-setactive", highPerformanceGUID).Run(); err == nil {
+	if err := system.Exec("powercfg", "-setactive", highPerformanceGUID); err == nil {
 		ActiveTargetScheme = highPerformanceGUID
 		return nil
 	}
@@ -71,7 +72,7 @@ func StartPowerLockTicker(ctx context.Context) {
 				active, err := getActiveScheme()
 				if err == nil && active != ActiveTargetScheme {
 					// Direct override and enforce targeted performance plan
-					_ = exec.Command("powercfg", "-setactive", ActiveTargetScheme).Run()
+					_ = system.Exec("powercfg", "-setactive", ActiveTargetScheme)
 				}
 			}
 		}

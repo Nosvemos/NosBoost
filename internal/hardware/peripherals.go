@@ -2,9 +2,9 @@ package hardware
 
 import (
 	"fmt"
-	"os/exec"
 
 	"nosboost/internal/config"
+	"nosboost/internal/system"
 
 	"golang.org/x/sys/windows/registry"
 )
@@ -119,9 +119,9 @@ func OptimizeInputLatency() error {
 
 	// 4. Disable USB Selective Suspend in current power scheme (prevents device stutters)
 	if scheme, err := getActiveScheme(); err == nil {
-		_ = exec.Command("powercfg", "/setacvalueindex", scheme, "2a737441-1930-4402-8d77-b2bebba308a3", "48e6d7a4-450f-48d2-957c-d4924c350322", "0").Run()
-		_ = exec.Command("powercfg", "/setdcvalueindex", scheme, "2a737441-1930-4402-8d77-b2bebba308a3", "48e6d7a4-450f-48d2-957c-d4924c350322", "0").Run()
-		_ = exec.Command("powercfg", "/setactive", scheme).Run()
+		_ = system.Exec("powercfg", "/setacvalueindex", scheme, "2a737441-1930-4402-8d77-b2bebba308a3", "48e6d7a4-450f-48d2-957c-d4924c350322", "0")
+		_ = system.Exec("powercfg", "/setdcvalueindex", scheme, "2a737441-1930-4402-8d77-b2bebba308a3", "48e6d7a4-450f-48d2-957c-d4924c350322", "0")
+		_ = system.Exec("powercfg", "/setactive", scheme)
 	}
 
 	return nil
@@ -193,9 +193,9 @@ func RestoreInputLatency() error {
 
 	// 4. Restore USB Selective Suspend (normally 1 / Enabled on standard OS)
 	if scheme, err := getActiveScheme(); err == nil {
-		_ = exec.Command("powercfg", "/setacvalueindex", scheme, "2a737441-1930-4402-8d77-b2bebba308a3", "48e6d7a4-450f-48d2-957c-d4924c350322", "1").Run()
-		_ = exec.Command("powercfg", "/setdcvalueindex", scheme, "2a737441-1930-4402-8d77-b2bebba308a3", "48e6d7a4-450f-48d2-957c-d4924c350322", "1").Run()
-		_ = exec.Command("powercfg", "/setactive", scheme).Run()
+		_ = system.Exec("powercfg", "/setacvalueindex", scheme, "2a737441-1930-4402-8d77-b2bebba308a3", "48e6d7a4-450f-48d2-957c-d4924c350322", "1")
+		_ = system.Exec("powercfg", "/setdcvalueindex", scheme, "2a737441-1930-4402-8d77-b2bebba308a3", "48e6d7a4-450f-48d2-957c-d4924c350322", "1")
+		_ = system.Exec("powercfg", "/setactive", scheme)
 	}
 
 	return nil

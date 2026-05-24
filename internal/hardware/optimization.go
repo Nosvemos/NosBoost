@@ -2,7 +2,8 @@ package hardware
 
 import (
 	"fmt"
-	"os/exec"
+
+	"nosboost/internal/system"
 
 	"golang.org/x/sys/windows/registry"
 	"golang.org/x/sys/windows/svc"
@@ -76,8 +77,7 @@ func SetHibernationDisabled(disabled bool) error {
 		stateStr = "on"
 	}
 
-	cmd := exec.Command("powercfg", "-h", stateStr)
-	if err := cmd.Run(); err != nil {
+	if err := system.Exec("powercfg", "-h", stateStr); err != nil {
 		return fmt.Errorf("failed to toggle hibernation state: %w", err)
 	}
 	return nil

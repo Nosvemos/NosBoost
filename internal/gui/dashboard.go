@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"image/color"
 	"os"
-	"os/exec"
 	"strings"
 
 	"fyne.io/fyne/v2"
@@ -19,6 +18,7 @@ import (
 	"nosboost/internal/config"
 	"nosboost/internal/hardware"
 	"nosboost/internal/memory"
+	"nosboost/internal/system"
 	"nosboost/internal/syswatch"
 )
 
@@ -109,7 +109,7 @@ func ShowDashboard() {
 	titleLabel.TextStyle = fyne.TextStyle{Bold: true}
 	titleLabel.Alignment = fyne.TextAlignCenter
 
-	subtitleLabel := canvas.NewText(config.T("subtitle"), theme.ForegroundColor())
+	subtitleLabel := canvas.NewText(fmt.Sprintf(config.T("subtitle"), config.AppVersion), theme.ForegroundColor())
 	subtitleLabel.TextSize = 14 // Increased by 2px (now 14)
 	subtitleLabel.Alignment = fyne.TextAlignCenter
 
@@ -157,13 +157,13 @@ func ShowDashboard() {
 	flushNetworkBtn := widget.NewButtonWithIcon(config.T("flush_dns"), theme.ViewRefreshIcon(), func() {
 		go func() {
 			logToUI("[NETWORK] Flushing DNS Resolver Cache...")
-			if err := exec.Command("ipconfig", "/flushdns").Run(); err != nil {
+			if err := system.Exec("ipconfig", "/flushdns"); err != nil {
 				logToUI(fmt.Sprintf("[WARNING] FlushDNS error: %v", err))
 			} else {
 				logToUI("[NETWORK] DNS Resolver Cache flushed successfully.")
 			}
 			logToUI("[NETWORK] Resetting Winsock TCP/IP stack to clean up packet drops...")
-			if err := exec.Command("netsh", "winsock", "reset").Run(); err != nil {
+			if err := system.Exec("netsh", "winsock", "reset"); err != nil {
 				logToUI(fmt.Sprintf("[WARNING] Winsock reset error: %v", err))
 			} else {
 				logToUI("[NETWORK] Winsock TCP/IP stack catalog reset successfully (Reboot recommended).")
@@ -566,7 +566,7 @@ func ShowDashboard() {
 
 		titleLabel.Text = config.T("app_title")
 		titleLabel.Color = theme.PrimaryColor()
-		subtitleLabel.Text = config.T("subtitle")
+		subtitleLabel.Text = fmt.Sprintf(config.T("subtitle"), config.AppVersion)
 		subtitleLabel.Color = theme.ForegroundColor()
 
 		memCard.Title = config.T("ram_health")

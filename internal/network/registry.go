@@ -4,10 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"os/exec"
 	"strings"
 
 	"nosboost/internal/config"
+	"nosboost/internal/system"
 
 	"golang.org/x/sys/windows/registry"
 )
@@ -109,7 +109,7 @@ func DiscoverActiveNIC() (*ActiveNICInfo, error) {
 
 // getDefaultGatewayFallback queries the system routing table for the default route to extract the gateway IP.
 func getDefaultGatewayFallback() (string, error) {
-	cmd := exec.Command("route", "print", "0.0.0.0")
+	cmd := system.Command("route", "print", "0.0.0.0")
 	out, err := cmd.Output()
 	if err != nil {
 		return "", err
@@ -234,17 +234,17 @@ func RevertTCPNoDelay() error {
 // OptimizeNetworkInterfaceSettings disables LSO/RSC and configures global TCP settings (RSS, DCA, ECN) for maximum packet stability and low latency.
 func OptimizeNetworkInterfaceSettings() error {
 	// 1. Disable Large Send Offload (LSO) which causes high packet drops/loss
-	_ = exec.Command("powershell", "-Command", "Disable-NetAdapterLso -Name * -IPv4 -Confirm:$false -ErrorAction SilentlyContinue").Run()
-	_ = exec.Command("powershell", "-Command", "Disable-NetAdapterLso -Name * -IPv6 -Confirm:$false -ErrorAction SilentlyContinue").Run()
+	_ = system.Exec("powershell", "-Command", "Disable-NetAdapterLso -Name * -IPv4 -Confirm:$false -ErrorAction SilentlyContinue")
+	_ = system.Exec("powershell", "-Command", "Disable-NetAdapterLso -Name * -IPv6 -Confirm:$false -ErrorAction SilentlyContinue")
 
 	// 2. Disable Receive Segment Coalescing (RSC) which causes packet latency/jitter stutters
-	_ = exec.Command("powershell", "-Command", "Disable-NetAdapterRsc -Name * -Confirm:$false -ErrorAction SilentlyContinue").Run()
+	_ = system.Exec("powershell", "-Command", "Disable-NetAdapterRsc -Name * -Confirm:$false -ErrorAction SilentlyContinue")
 
 	// 3. Configure netsh global TCP low-latency/loss-prevention overrides
-	_ = exec.Command("netsh", "int", "tcp", "set", "global", "rss=enabled").Run()
-	_ = exec.Command("netsh", "int", "tcp", "set", "global", "dca=enabled").Run()
-	_ = exec.Command("netsh", "int", "tcp", "set", "global", "ecncapability=disabled").Run()
-	_ = exec.Command("netsh", "int", "tcp", "set", "global", "autotuninglevel=normal").Run()
+	_ = system.Exec("netsh", "int", "tcp", "set", "global", "rss=enabled")
+	_ = system.Exec("netsh", "int", "tcp", "set", "global", "dca=enabled")
+	_ = system.Exec("netsh", "int", "tcp", "set", "global", "ecncapability=disabled")
+	_ = system.Exec("netsh", "int", "tcp", "set", "global", "autotuninglevel=normal")
 
 	return nil
 }
@@ -252,17 +252,17 @@ func OptimizeNetworkInterfaceSettings() error {
 // RestoreNetworkInterfaceSettings restores LSO, RSC and global TCP settings to OS defaults.
 func RestoreNetworkInterfaceSettings() error {
 	// 1. Re-enable Large Send Offload (LSO) to Windows defaults
-	_ = exec.Command("powershell", "-Command", "Enable-NetAdapterLso -Name * -IPv4 -Confirm:$false -ErrorAction SilentlyContinue").Run()
-	_ = exec.Command("powershell", "-Command", "Enable-NetAdapterLso -Name * -IPv6 -Confirm:$false -ErrorAction SilentlyContinue").Run()
+	_ = system.Exec("powershell", "-Command", "Enable-NetAdapterLso -Name * -IPv4 -Confirm:$false -ErrorAction SilentlyContinue")
+	_ = system.Exec("powershell", "-Command", "Enable-NetAdapterLso -Name * -IPv6 -Confirm:$false -ErrorAction SilentlyContinue")
 
 	// 2. Re-enable Receive Segment Coalescing (RSC) to Windows defaults
-	_ = exec.Command("powershell", "-Command", "Enable-NetAdapterRsc -Name * -Confirm:$false -ErrorAction SilentlyContinue").Run()
+	_ = system.Exec("powershell", "-Command", "Enable-NetAdapterRsc -Name * -Confirm:$false -ErrorAction SilentlyContinue")
 
 	// 3. Restore global TCP parameters to default OS profiles
-	_ = exec.Command("netsh", "int", "tcp", "set", "global", "rss=enabled").Run()
-	_ = exec.Command("netsh", "int", "tcp", "set", "global", "dca=disabled").Run()
-	_ = exec.Command("netsh", "int", "tcp", "set", "global", "ecncapability=default").Run()
-	_ = exec.Command("netsh", "int", "tcp", "set", "global", "autotuninglevel=normal").Run()
+	_ = system.Exec("netsh", "int", "tcp", "set", "global", "rss=enabled")
+	_ = system.Exec("netsh", "int", "tcp", "set", "global", "dca=disabled")
+	_ = system.Exec("netsh", "int", "tcp", "set", "global", "ecncapability=default")
+	_ = system.Exec("netsh", "int", "tcp", "set", "global", "autotuninglevel=normal")
 
 	return nil
 }

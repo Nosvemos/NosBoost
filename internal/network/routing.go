@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"os/exec"
 	"strings"
+
+	"nosboost/internal/system"
 )
 
 // GameSubnet defines a list of subnets associated with a game.
@@ -103,8 +104,7 @@ func InjectGameRoutes() ([]string, error) {
 
 			// Add route via route add command
 			// route add [Subnet] mask [Mask] [Gateway] metric 1
-			cmd := exec.Command("route", "add", ip, "mask", mask, nic.DefaultGateway, "metric", "1")
-			if err := cmd.Run(); err == nil {
+			if err := system.Exec("route", "add", ip, "mask", mask, nic.DefaultGateway, "metric", "1"); err == nil {
 				injected = append(injected, subnet)
 			}
 		}
@@ -125,8 +125,7 @@ func DeleteGameRoutes(subnets []string) int {
 		ip := parts[0]
 
 		// Execute route delete [SubnetIP]
-		cmd := exec.Command("route", "delete", ip)
-		if err := cmd.Run(); err == nil {
+		if err := system.Exec("route", "delete", ip); err == nil {
 			deletedCount++
 		}
 	}

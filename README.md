@@ -106,10 +106,10 @@ This method embeds an official XML manifest into the Windows binary. The OS will
     rsrc -manifest nosboost.exe.manifest -o cmd/nosboost/rsrc.syso
     ```
 4.  **Build the Standalone Binary**:
-    Compile the binary with CGO enabled. Use `-ldflags "-H=windowsgui"` to hide the standard console command prompt behind the Fyne window:
+    Compile the binary with CGO enabled. Use static external linker flags (`-extldflags "-static"`) to package MinGW/GCC C runtime libraries inside the binary, enabling 100% portable standalone execution. Suppress standard symbols (`-s -w`) to optimize file size, and hide the console window (`-H=windowsgui`):
     ```powershell
     $env:CGO_ENABLED="1"
-    go build -ldflags "-H=windowsgui" -o NosBoost.exe ./cmd/nosboost
+    go build -ldflags="-s -w -H=windowsgui -extldflags '-static'" -o NosBoostOptimizer.exe ./cmd/nosboost
     ```
 
 ---
@@ -140,8 +140,23 @@ This method embeds an official XML manifest into the Windows binary. The OS will
 5.  **Build Binary**:
     ```powershell
     $env:CGO_ENABLED="1"
-    go build -ldflags "-H=windowsgui" -o NosBoost.exe ./cmd/nosboost
+    go build -ldflags="-s -w -H=windowsgui -extldflags '-static'" -o NosBoostOptimizer.exe ./cmd/nosboost
     ```
+
+---
+
+## 🏷️ GitHub Releases & Dynamic Versioning
+
+NosBoost supports a dynamic, build-time overridable version control system. The version is managed in a single variable inside `internal/config/version.go`. 
+
+When preparing a production release for GitHub, you can dynamically inject the target tag/release version into the binary at compile time using Go compiler `-ldflags`:
+
+```powershell
+$env:CGO_ENABLED="1"
+go build -ldflags="-s -w -H=windowsgui -extldflags '-static' -X 'nosboost/internal/config.AppVersion=v1.1.0'" -o NosBoostOptimizer.exe ./cmd/nosboost
+```
+
+This dynamically binds `v1.1.0` (or any custom tag) into the application's core metadata, and automatically renders the updated version inside the localized GUI sub-headers in both English and Turkish instantly.
 
 ---
 

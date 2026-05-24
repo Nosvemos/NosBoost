@@ -3,7 +3,7 @@
   "theme_dark": "Karanlık Tema",
   "theme_light": "Açık Tema",
   "app_title": "NosBoost",
-  "subtitle": "Yüksek Performanslı Windows Çekirdek Gecikme Motoru // Üretim Sürümü v1.0.0",
+  "subtitle": "Yüksek Performanslı Windows Çekirdek Gecikme Motoru // Üretim Sürümü %s",
   "ram_health": "FİZİKSEL BELLEK SAĞLIĞI",
   "allocated_ram": "Kullanılan RAM: %s",
   "clean_mem": "BELLEĞİ TEMİZLE",
