@@ -11,6 +11,7 @@ import (
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/mgr"
 
+	"nosboost/internal/config"
 	"nosboost/internal/syswatch"
 )
 
@@ -43,17 +44,17 @@ func runTelemetryTickers(
 			fyne.Do(func() {
 				hudMode.SetText(fmt.Sprintf("MATRIX STATUS: ENGAGED [%s]", strings.ToUpper(mode)))
 				if mode == "Safe Default" {
-					hudDetails.SetText("Core Parking: Active | MSI Mode: Default | TCP Delay: OS Standard")
-					netStatus.SetText("Network Latency Engine: Default (OS Standard)")
-					packetShield.SetText("Packet Loss Shield: Inactive")
+					hudDetails.SetText(config.T("hud_safe_default"))
+					netStatus.SetText(config.T("net_state_default"))
+					packetShield.SetText(config.T("packet_inactive"))
 				} else if mode == "Balanced" {
-					hudDetails.SetText("Core Parking: Disabled | MSI Mode: Locked | TCP Delay: Instant Fire")
-					netStatus.SetText("Network Latency Engine: Optimized (Instant TCP Active)")
-					packetShield.SetText("Packet Loss Shield: Active (LSO/RSC Disabled)")
+					hudDetails.SetText(config.T("hud_balanced"))
+					netStatus.SetText(config.T("net_state_opt"))
+					packetShield.SetText(config.T("packet_active"))
 				} else {
-					hudDetails.SetText("Core Parking: Disabled | MSI Mode: Locked | TCP Delay: Instant Fire | Services: Frozen")
-					netStatus.SetText("Network Latency Engine: Optimized (Instant TCP Active)")
-					packetShield.SetText("Packet Loss Shield: Active (LSO/RSC Disabled)")
+					hudDetails.SetText(config.T("hud_extreme"))
+					netStatus.SetText(config.T("net_state_opt"))
+					packetShield.SetText(config.T("packet_active"))
 				}
 			})
 		}
@@ -68,7 +69,7 @@ func updateMemoryTelemetry(ramAlloc *widget.Label, memProgress *widget.ProgressB
 	r1, _, _ := procGlobalMemoryStatus.Call(uintptr(unsafe.Pointer(&mem)))
 	if r1 == 0 {
 		fyne.Do(func() {
-			ramAlloc.SetText("RAM Allocation: Failed to query Windows APIs")
+			ramAlloc.SetText(config.T("srv_query_failed"))
 		})
 		return
 	}
@@ -79,7 +80,7 @@ func updateMemoryTelemetry(ramAlloc *widget.Label, memProgress *widget.ProgressB
 	percent := float64(mem.MemoryLoad)
 
 	fyne.Do(func() {
-		ramAlloc.SetText(fmt.Sprintf("Allocated RAM: %.2f GB / %.2f GB (%d%%)", allocGB, totalGB, int(percent)))
+		ramAlloc.SetText(fmt.Sprintf(config.T("allocated_ram"), fmt.Sprintf("%.2f GB / %.2f GB (%d%%)", allocGB, totalGB, int(percent))))
 		memProgress.SetValue(percent / 100.0)
 	})
 }
@@ -90,33 +91,33 @@ func updateSchedulerTelemetry(cpuOpt, timer, hags, gameMode *widget.Label) {
 
 	var cpuOptText, timerText string
 	if mode == "Safe Default" {
-		cpuOptText = "CPU Optimization: Safe Default (Standard Scheduling)"
-		timerText = "System Precision Timers: Default (OS Managed)"
+		cpuOptText = config.T("cpu_state_default")
+		timerText = config.T("timer_state_default")
 	} else {
-		cpuOptText = "CPU Optimization: Engaged (Short-Variable Quantum & Core Unparking)"
-		timerText = "System Precision Timers: Locked (Invariant Precision 0.5ms)"
+		cpuOptText = config.T("cpu_state_opt")
+		timerText = config.T("timer_state_opt")
 	}
 
 	hagsVal, hagsErr := syswatch.GetHAGSState()
 	var hagsText string
 	if hagsErr != nil {
-		hagsText = "Hardware GPU Scheduling (HAGS): Error"
+		hagsText = config.T("hags_error")
 	} else if hagsVal == 2 {
-		hagsText = "Hardware GPU Scheduling (HAGS): Enabled (Active)"
+		hagsText = config.T("hags_enabled")
 	} else if hagsVal == 1 {
-		hagsText = "Hardware GPU Scheduling (HAGS): Disabled"
+		hagsText = config.T("hags_disabled")
 	} else {
-		hagsText = "Hardware GPU Scheduling (HAGS): Not Supported"
+		hagsText = config.T("hags_unsupported")
 	}
 
 	gmActive, gmErr := syswatch.GetGameModeState()
 	var gmText string
 	if gmErr != nil {
-		gmText = "Windows Game Mode: Error"
+		gmText = config.T("game_mode_error")
 	} else if gmActive {
-		gmText = "Windows Game Mode: Enabled"
+		gmText = config.T("game_mode_enabled")
 	} else {
-		gmText = "Windows Game Mode: Disabled"
+		gmText = config.T("game_mode_disabled")
 	}
 
 	fyne.Do(func() {
@@ -132,7 +133,7 @@ func updateServicesTelemetry(srvStatus *widget.Label) {
 	m, err := mgr.Connect()
 	if err != nil {
 		fyne.Do(func() {
-			srvStatus.SetText("Background Services: Query Failed")
+			srvStatus.SetText(config.T("srv_query_failed"))
 		})
 		return
 	}
@@ -161,11 +162,11 @@ func updateServicesTelemetry(srvStatus *widget.Label) {
 
 	fyne.Do(func() {
 		if updatesStopped && telemetryStopped && sysmainStopped {
-			srvStatus.SetText("Background Diagnostics & Windows Update: Suspended (Fully Optimized)")
+			srvStatus.SetText(config.T("srv_state_opt"))
 		} else if updatesStopped || telemetryStopped || sysmainStopped {
-			srvStatus.SetText("Background Diagnostics & Windows Update: Partially Suspended")
+			srvStatus.SetText(config.T("srv_state_partial"))
 		} else {
-			srvStatus.SetText("Background Diagnostics & Windows Update: Standard (Running)")
+			srvStatus.SetText(config.T("srv_state_default"))
 		}
 	})
 }

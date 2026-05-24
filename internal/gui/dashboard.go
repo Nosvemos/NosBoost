@@ -2,6 +2,7 @@ package gui
 
 import (
 	"fmt"
+	"image/color"
 	"os"
 	"os/exec"
 	"strings"
@@ -15,9 +16,81 @@ import (
 
 	"golang.org/x/sys/windows/svc/mgr"
 
+	"nosboost/internal/config"
+	"nosboost/internal/hardware"
 	"nosboost/internal/memory"
 	"nosboost/internal/syswatch"
 )
+
+func createVSpacer(height float32) fyne.CanvasObject {
+	rect := canvas.NewRectangle(color.Transparent)
+	rect.SetMinSize(fyne.NewSize(0, height))
+	return rect
+}
+
+// DynamicGridLayout implements a fully responsive, wrap-around column-based Fyne layout.
+type DynamicGridLayout struct {
+	MaxCols     int
+	MinColWidth float32
+}
+
+func (l *DynamicGridLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
+	if len(objects) == 0 {
+		return fyne.NewSize(0, 0)
+	}
+	w := l.MinColWidth
+	h := float32(0)
+	for _, obj := range objects {
+		h += obj.MinSize().Height + theme.Padding()
+	}
+	return fyne.NewSize(w, h)
+}
+
+func (l *DynamicGridLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
+	count := len(objects)
+	if count == 0 {
+		return
+	}
+
+	cols := int(size.Width / l.MinColWidth)
+	if cols < 1 {
+		cols = 1
+	}
+	if cols > l.MaxCols {
+		cols = l.MaxCols
+	}
+
+	cellWidth := (size.Width - float32(cols-1)*theme.Padding()) / float32(cols)
+
+	// Calculate row heights dynamically based on largest cell in each row
+	rowHeights := make(map[int]float32)
+	for i, obj := range objects {
+		row := i / cols
+		h := obj.MinSize().Height
+		if h > rowHeights[row] {
+			rowHeights[row] = h
+		}
+	}
+
+	x := float32(0)
+	y := float32(0)
+
+	for i, obj := range objects {
+		row := i / cols
+		col := i % cols
+
+		if col == 0 && i > 0 {
+			x = 0
+			y += rowHeights[row-1] + theme.Padding()
+		}
+
+		objSize := fyne.NewSize(cellWidth, rowHeights[row])
+		obj.Resize(objSize)
+		obj.Move(fyne.NewPos(x, y))
+
+		x += cellWidth + theme.Padding()
+	}
+}
 
 // ShowDashboard bootstraps and renders the overhauled premium Fyne native command center.
 func ShowDashboard() {
@@ -25,16 +98,19 @@ func ShowDashboard() {
 	os.Setenv("FYNE_THEME", "dark")
 
 	myApp := app.New()
-	myWindow := myApp.NewWindow("NosBoost Command Center // Active Performance Matrix")
+	myWindow := myApp.NewWindow("NosBoost | Performance Optimizer")
 
-	// 2. Setup Header Panel
-	titleLabel := canvas.NewText("NOSBOOST COMMAND CENTER", theme.PrimaryColor())
-	titleLabel.TextSize = 22
+	var refreshUIStrings func()
+	var isRefreshingStrings bool
+
+	// 2. Setup Header Panel with 2px increased font sizes
+	titleLabel := canvas.NewText(config.T("app_title"), theme.PrimaryColor())
+	titleLabel.TextSize = 28 // Increased by 2px (now 28)
 	titleLabel.TextStyle = fyne.TextStyle{Bold: true}
 	titleLabel.Alignment = fyne.TextAlignCenter
 
-	subtitleLabel := canvas.NewText("Windows Kernel Systems Latency Enforcement Engine // Production Release v1.0.0", theme.ForegroundColor())
-	subtitleLabel.TextSize = 10
+	subtitleLabel := canvas.NewText(config.T("subtitle"), theme.ForegroundColor())
+	subtitleLabel.TextSize = 14 // Increased by 2px (now 14)
 	subtitleLabel.Alignment = fyne.TextAlignCenter
 
 	headerContainer := container.NewVBox(
@@ -43,14 +119,13 @@ func ShowDashboard() {
 		widget.NewSeparator(),
 	)
 
-	// 3. LEFT POWER COLUMN: ADVANCED TELEMETRY ENGINE MONITOR
-	// Card 1: Physical Memory segmented breakdown display
-	ramAllocLabel := widget.NewLabel("Allocated RAM: Querying...")
+	// 3. PHYSICAL MEMORY HEALTH
+	ramAllocLabel := widget.NewLabel(config.T("ram_querying"))
 	ramAllocLabel.TextStyle = fyne.TextStyle{Bold: true, Monospace: true}
 	ramAllocLabel.Wrapping = fyne.TextWrapWord
 
 	memProgress := widget.NewProgressBar()
-	cleanMemBtn := widget.NewButtonWithIcon("CLEAN MEMORY", theme.ContentClearIcon(), func() {
+	cleanMemBtn := widget.NewButtonWithIcon(config.T("clean_mem"), theme.ContentClearIcon(), func() {
 		go func() {
 			logToUI("[MEMORY] Initiating background RAM standby cache cleaning sweep...")
 			if err := memory.PurgeStandbyList(); err != nil {
@@ -64,22 +139,22 @@ func ShowDashboard() {
 	})
 	cleanMemBtn.Importance = widget.WarningImportance
 
-	memCard := widget.NewCard("PHYSICAL MEMORY HEALTH", "", container.NewVBox(
+	memCard := widget.NewCard(config.T("ram_health"), "", container.NewVBox(
 		ramAllocLabel,
 		memProgress,
 		cleanMemBtn,
 	))
 
-	// Card 2: Network Stabilization Status Elements (Dynamic status dashboard)
-	netStatusLabel := widget.NewLabel("Network Latency Engine: Querying...")
+	// 4. NETWORK PACKET LOSS & LATENCY SHIELD
+	netStatusLabel := widget.NewLabel(config.T("net_querying"))
 	netStatusLabel.TextStyle = fyne.TextStyle{Monospace: true}
 	netStatusLabel.Wrapping = fyne.TextWrapWord
 
-	packetShieldLabel := widget.NewLabel("Packet Loss Shield: Querying...")
+	packetShieldLabel := widget.NewLabel(config.T("packet_querying"))
 	packetShieldLabel.TextStyle = fyne.TextStyle{Monospace: true}
 	packetShieldLabel.Wrapping = fyne.TextWrapWord
 
-	flushNetworkBtn := widget.NewButtonWithIcon("FLUSH DNS & RESET CONNECTION", theme.ViewRefreshIcon(), func() {
+	flushNetworkBtn := widget.NewButtonWithIcon(config.T("flush_dns"), theme.ViewRefreshIcon(), func() {
 		go func() {
 			logToUI("[NETWORK] Flushing DNS Resolver Cache...")
 			if err := exec.Command("ipconfig", "/flushdns").Run(); err != nil {
@@ -97,30 +172,30 @@ func ShowDashboard() {
 	})
 	flushNetworkBtn.Importance = widget.WarningImportance
 
-	netDetailsCard := widget.NewCard("NETWORK PACKET LOSS & LATENCY SHIELD", "", container.NewVBox(
+	netDetailsCard := widget.NewCard(config.T("net_shield"), "", container.NewVBox(
 		netStatusLabel,
 		packetShieldLabel,
 		widget.NewSeparator(),
 		flushNetworkBtn,
 	))
 
-	// Card 3: Kernel Scheduler Status
-	cpuOptLabel := widget.NewLabel("CPU Optimization: Querying...")
+	// 5. KERNEL SCHEDULER & TIMERS
+	cpuOptLabel := widget.NewLabel(config.T("cpu_querying"))
 	cpuOptLabel.Wrapping = fyne.TextWrapWord
-	timerLabel := widget.NewLabel("System Precision Timers: Querying...")
+	timerLabel := widget.NewLabel(config.T("timers_querying"))
 	timerLabel.Wrapping = fyne.TextWrapWord
-	hagsLabel := widget.NewLabel("Hardware GPU Scheduling (HAGS): Querying...")
+	hagsLabel := widget.NewLabel(config.T("hags_querying"))
 	hagsLabel.Wrapping = fyne.TextWrapWord
-	gameModeLabel := widget.NewLabel("Windows Game Mode: Querying...")
+	gameModeLabel := widget.NewLabel(config.T("game_mode_querying"))
 	gameModeLabel.Wrapping = fyne.TextWrapWord
 
-	kernelCard := widget.NewCard("KERNEL SCHEDULER & TIMERS", "", container.NewVBox(
+	kernelCard := widget.NewCard(config.T("kernel_card"), "", container.NewVBox(
 		cpuOptLabel,
 		timerLabel,
 		hagsLabel,
 		gameModeLabel,
 		container.NewGridWithColumns(2,
-			widget.NewButton("Toggle Game Mode", func() {
+			widget.NewButton(config.T("toggle_game_mode"), func() {
 				go func() {
 					current, _ := syswatch.GetGameModeState()
 					err := syswatch.SetGameModeState(!current)
@@ -138,7 +213,7 @@ func ShowDashboard() {
 					}
 				}()
 			}),
-			widget.NewButton("Toggle HAGS", func() {
+			widget.NewButton(config.T("toggle_hags"), func() {
 				go func() {
 					current, _ := syswatch.GetHAGSState()
 					enabled := current != 2
@@ -160,11 +235,11 @@ func ShowDashboard() {
 		),
 	))
 
-	// Card 4: OS Services checklist & deep verifier
-	srvStatusLabel := widget.NewLabel("Background Diagnostics & Windows Update: Querying...")
+	// 6. TELEMETRY SERVICE DISCOVERY LEDGER
+	srvStatusLabel := widget.NewLabel(config.T("srv_querying"))
 	srvStatusLabel.Wrapping = fyne.TextWrapWord
 
-	deepVerifierBtn := widget.NewButtonWithIcon("Verify Background Services", theme.SearchIcon(), func() {
+	deepVerifierBtn := widget.NewButtonWithIcon(config.T("verify_srv"), theme.SearchIcon(), func() {
 		go func() {
 			logToUI("[SYSWATCH] Querying service process parameters...")
 			m, err := mgr.Connect()
@@ -190,20 +265,20 @@ func ShowDashboard() {
 		}()
 	})
 
-	srvCard := widget.NewCard("TELEMETRY SERVICE DISCOVERY LEDGER", "", container.NewVBox(
+	srvCard := widget.NewCard(config.T("srv_ledger"), "", container.NewVBox(
 		srvStatusLabel,
 		deepVerifierBtn,
 	))
 
-	// 4. RIGHT POWER COLUMN: ONE-CLICK ORCHESTRATION & DYNAMIC HUD
+	// 7. ACTIVE PERFORMANCE HUD
 	hudModeLabel := widget.NewLabel("MATRIX STATUS: ENGAGED [SAFE BASELINE]")
 	hudModeLabel.TextStyle = fyne.TextStyle{Bold: true}
 	hudModeLabel.Wrapping = fyne.TextWrapWord
-	hudDetailsLabel := widget.NewLabel("Core parking: Active | MSI Mode: Off | TCP Delay: OS Defaults")
+	hudDetailsLabel := widget.NewLabel(config.T("hud_safe_default"))
 	hudDetailsLabel.TextStyle = fyne.TextStyle{Monospace: true}
 	hudDetailsLabel.Wrapping = fyne.TextWrapWord
 
-	blueprintBtn := widget.NewButtonWithIcon("Query Detailed Engagement Blueprint", theme.InfoIcon(), func() {
+	blueprintBtn := widget.NewButtonWithIcon(config.T("blueprint"), theme.InfoIcon(), func() {
 		go func() {
 			logToUI("==================================================")
 			logToUI("[BLUEPRINT] Current Active Optimization Specifications:")
@@ -217,118 +292,232 @@ func ShowDashboard() {
 		}()
 	})
 
-	hudCard := widget.NewCard("ACTIVE PERFORMANCE MATRIX STATUS HUD", "", container.NewVBox(
+	hudCard := widget.NewCard(config.T("hud_title"), "", container.NewVBox(
 		hudModeLabel,
 		hudDetailsLabel,
 		blueprintBtn,
 	))
 
-	// Extreme Card
-	extremeFeatures := widget.NewLabel(
-		"Maximizes in-game FPS and eliminates input latency.\n" +
-		"Restricts background system apps, disables power saving,\n" +
-		"freezes telemetry cycles, and isolates gaming processes.",
-	)
+	// Extreme Profile
+	extremeFeatures := widget.NewLabel(config.T("extreme_desc"))
 	extremeFeatures.TextStyle = fyne.TextStyle{Italic: true}
-	extremeCardBtn := widget.NewButtonWithIcon("ENGAGE EXTREME PERFORMANCE MATRIX", theme.ConfirmIcon(), func() {
+	extremeFeatures.Wrapping = fyne.TextWrapWord
+	extremeCardBtn := widget.NewButtonWithIcon(config.T("extreme_btn"), theme.ConfirmIcon(), func() {
 		logToUI("[UI] User initiated EXTREME mode trigger.")
 		go ApplyExtremeMode()
 	})
 	extremeCardBtn.Importance = widget.HighImportance
 
-	extremeCard := widget.NewCard("EXTREME PERFORMANCE PROFILE", "", container.NewVBox(
+	extremeCard := widget.NewCard(config.T("extreme_title"), "", container.NewVBox(
 		extremeFeatures,
 		extremeCardBtn,
 	))
 
-	// Balanced Card
-	balancedFeatures := widget.NewLabel(
-		"Improves gaming performance and network responsiveness\n" +
-		"while keeping background services active to permit safe\n" +
-		"multitasking (web browsing, recording, and streaming).",
-	)
+	// Balanced Profile
+	balancedFeatures := widget.NewLabel(config.T("balanced_desc"))
 	balancedFeatures.TextStyle = fyne.TextStyle{Italic: true}
-	balancedCardBtn := widget.NewButtonWithIcon("ENGAGE BALANCED PERFORMANCE MATRIX", theme.MediaPlayIcon(), func() {
+	balancedFeatures.Wrapping = fyne.TextWrapWord
+	balancedCardBtn := widget.NewButtonWithIcon(config.T("balanced_btn"), theme.MediaPlayIcon(), func() {
 		logToUI("[UI] User initiated BALANCED mode trigger.")
 		go ApplyBalancedMode()
 	})
 
-	balancedCard := widget.NewCard("BALANCED PERFORMANCE PROFILE", "", container.NewVBox(
+	balancedCard := widget.NewCard(config.T("balanced_title"), "", container.NewVBox(
 		balancedFeatures,
 		balancedCardBtn,
 	))
 
-	// Total Restore transactional card with confirmation stage
+	// Total Restore transactional card
 	var restoreContainer *fyne.Container
 	var restoreCard *widget.Card
 	var restoreNormalLayout *fyne.Container
+	restoreDescLabel := widget.NewLabel(config.T("restore_desc"))
+	restoreDescLabel.Wrapping = fyne.TextWrapWord
 
-	restoreNormalLayout = container.NewVBox(
-		widget.NewLabel("Wipes injected routing routes, restores display/NIC MSI defaults,"),
-		widget.NewLabel("re-enables SysMain, restores timers, and unfreezes processes."),
-		widget.NewButtonWithIcon("INITIATE TOTAL ROLLBACK MATRIX", theme.CancelIcon(), func() {
-			logToUI("[UI] User triggered Total Restore rollback plan evaluation.")
+	restoreCardBtn := widget.NewButtonWithIcon(config.T("restore_btn"), theme.CancelIcon(), func() {
+		logToUI("[UI] User triggered Total Restore rollback plan evaluation.")
 
-			// Overwrite the card container dynamically to show the rollback breakdown confirmation
-			restoreContainer.Objects = nil
+		restoreContainer.Objects = nil
 
-			breakdownLabel := widget.NewLabel(
-				"SYSTEM ROLLBACK PLAN BREAKDOWN:\n" +
-				" 1. Revert Core Parking AC/DC indexes\n" +
-				" 2. Revert graphics card/NIC MSI parameters\n" +
-				" 3. Restore mouse/keyboard buffers to 100\n" +
-				" 4. Restart and re-enable service SysMain\n" +
-				" 5. Re-align system invariant boot timers\n" +
-				" 6. Remove static esports gateway routes\n" +
-				" 7. Resume background updater & diagnostic services",
-			)
-			breakdownLabel.TextStyle = fyne.TextStyle{Monospace: true, Bold: true}
+		breakdownLabel := widget.NewLabel(config.T("rollback_breakdown"))
+		breakdownLabel.TextStyle = fyne.TextStyle{Monospace: true, Bold: true}
+		breakdownLabel.Wrapping = fyne.TextWrapWord
 
-			confirmBtn := widget.NewButtonWithIcon("CONFIRM SYSTEM ROLLBACK NOW", theme.WarningIcon(), func() {
-				logToUI("[UI] User confirmed rollback execution.")
-				go func() {
-					ApplyTotalRestore()
+		confirmBtn := widget.NewButtonWithIcon(config.T("confirm_rollback"), theme.WarningIcon(), func() {
+			logToUI("[UI] User confirmed rollback execution.")
+			go func() {
+				ApplyTotalRestore()
 
-					// Revert UI back to normal after restore finished
-					restoreContainer.Objects = nil
-					restoreContainer.Add(restoreNormalLayout)
-					restoreCard.Refresh()
-				}()
-			})
-			confirmBtn.Importance = widget.DangerImportance
-
-			cancelBtn := widget.NewButton("Cancel Rollback", func() {
-				logToUI("[UI] User cancelled rollback plan.")
 				restoreContainer.Objects = nil
 				restoreContainer.Add(restoreNormalLayout)
 				restoreCard.Refresh()
-			})
+			}()
+		})
+		confirmBtn.Importance = widget.DangerImportance
 
-			restoreContainer.Add(breakdownLabel)
-			restoreContainer.Add(confirmBtn)
-			restoreContainer.Add(cancelBtn)
+		cancelBtn := widget.NewButton(config.T("cancel_rollback"), func() {
+			logToUI("[UI] User cancelled rollback plan.")
+			restoreContainer.Objects = nil
+			restoreContainer.Add(restoreNormalLayout)
 			restoreCard.Refresh()
-		}),
+		})
+
+		restoreContainer.Add(breakdownLabel)
+		restoreContainer.Add(confirmBtn)
+		restoreContainer.Add(cancelBtn)
+		restoreCard.Refresh()
+	})
+
+	restoreNormalLayout = container.NewVBox(
+		restoreDescLabel,
+		restoreCardBtn,
 	)
 
 	restoreContainer = container.NewVBox(restoreNormalLayout)
-	restoreCard = widget.NewCard("TOTAL ROLLBACK RESTORE (SAFE DEFAULT)", "", restoreContainer)
+	restoreCard = widget.NewCard(config.T("restore_title"), "", restoreContainer)
 
-	// 5. Build Tab Containers (Navbar/Tab design to eliminate scrollbars and simplify layout)
-	boosterTab := container.NewTabItem("Booster Engine", container.NewVBox(
-		hudCard,
-		container.NewGridWithColumns(2,
-			container.NewVBox(extremeCard, balancedCard),
-			restoreCard,
-		),
+	// Build dynamic language list from embedded locales JSON files
+	availLangs := config.GetAvailableLanguages()
+	var langNames []string
+	langCodeToName := make(map[string]string)
+	langNameToCode := make(map[string]string)
+
+	// Ensure English is first in list, and load other languages deterministically
+	if name, exists := availLangs["en"]; exists {
+		langNames = append(langNames, name)
+	}
+	for code, name := range availLangs {
+		if code != "en" {
+			langNames = append(langNames, name)
+		}
+	}
+
+	for code, name := range availLangs {
+		langCodeToName[code] = name
+		langNameToCode[name] = code
+	}
+
+	// Theme Selector widget with fully localizable choices
+	themeSelect := widget.NewSelect([]string{config.T("theme_dark"), config.T("theme_light")}, nil)
+	themeSelect.OnChanged = func(selected string) {
+		if selected == config.T("theme_dark") {
+			fyne.CurrentApp().Settings().SetTheme(theme.DarkTheme())
+			logToUI("[UI] Theme toggled to Dark Mode.")
+		} else {
+			fyne.CurrentApp().Settings().SetTheme(theme.LightTheme())
+			logToUI("[UI] Theme toggled to Light Mode.")
+		}
+		if refreshUIStrings != nil && !isRefreshingStrings {
+			refreshUIStrings()
+		}
+	}
+	themeSelect.SetSelected(config.T("theme_dark"))
+
+	langSelect := widget.NewSelect(langNames, nil)
+
+	// Localizable labels for the customization cards
+	themeLabel := widget.NewLabel(config.T("theme_label"))
+	langLabel := widget.NewLabel(config.T("lang_label"))
+
+	settingsCustomCard := widget.NewCard(config.T("settings_custom"), "", container.NewVBox(
+		themeLabel,
+		themeSelect,
+		widget.NewSeparator(),
+		langLabel,
+		langSelect,
 	))
 
-	systemTab := container.NewTabItem("Memory & Services", container.NewGridWithColumns(2,
-		memCard,
-		srvCard,
+	// Settings Tab Advanced Opt-In Toggles
+	dwmDescLabel := widget.NewLabel(config.T("dwm_desc"))
+	dwmDescLabel.Wrapping = fyne.TextWrapWord
+	dwmCheck := widget.NewCheck(config.T("dwm_label"), func(checked bool) {
+		go func() {
+			err := hardware.SetDwmPriority(checked)
+			if err != nil {
+				logToUI(fmt.Sprintf("[ERROR] DWM Priority set failed: %v", err))
+			} else {
+				if checked {
+					logToUI("[SYS] DWM priority optimization active (CpuPriorityClass = High).")
+				} else {
+					logToUI("[SYS] DWM priority optimization reverted.")
+				}
+			}
+		}()
+	})
+
+	searchDescLabel := widget.NewLabel(config.T("search_desc"))
+	searchDescLabel.Wrapping = fyne.TextWrapWord
+	searchCheck := widget.NewCheck(config.T("search_label"), func(checked bool) {
+		go func() {
+			err := hardware.SetSearchSuspended(checked)
+			if err != nil {
+				logToUI(fmt.Sprintf("[ERROR] Windows Search Suspend failed: %v", err))
+			} else {
+				if checked {
+					logToUI("[SYS] Windows Search suspended (Background indexing halted).")
+				} else {
+					logToUI("[SYS] Windows Search resumed.")
+				}
+			}
+		}()
+	})
+
+	hiberDescLabel := widget.NewLabel(config.T("hiber_desc"))
+	hiberDescLabel.Wrapping = fyne.TextWrapWord
+	hiberCheck := widget.NewCheck(config.T("hiber_label"), func(checked bool) {
+		go func() {
+			err := hardware.SetHibernationDisabled(checked)
+			if err != nil {
+				logToUI(fmt.Sprintf("[ERROR] Hibernation toggle failed: %v", err))
+			} else {
+				if checked {
+					logToUI("[SYS] Hibernation deactivated (Massive SSD space freed).")
+				} else {
+					logToUI("[SYS] Hibernation reactivated.")
+				}
+			}
+		}()
+	})
+
+	settingsPerfCard := widget.NewCard(config.T("settings_perf"), "", container.NewVBox(
+		dwmCheck,
+		dwmDescLabel,
+		widget.NewSeparator(),
+		searchCheck,
+		searchDescLabel,
+		widget.NewSeparator(),
+		hiberCheck,
+		hiberDescLabel,
 	))
 
-	netDescLabel := widget.NewLabel("TCP NoDelay & Gateway Route Injection are active in Performance Modes.")
+	settingsScroll := container.NewVScroll(container.NewVBox(
+		settingsCustomCard,
+		settingsPerfCard,
+	))
+
+	// 8. Build Tab Containers with Padded Margins to separate content from tab buttons
+	boosterTab := container.NewTabItem(config.T("booster_tab"), container.NewBorder(
+		createVSpacer(12), nil, nil, nil,
+		container.NewPadded(container.NewVScroll(container.NewVBox(
+			hudCard,
+			container.New(&DynamicGridLayout{MaxCols: 3, MinColWidth: 250},
+				extremeCard,
+				balancedCard,
+				restoreCard,
+			),
+		))),
+	))
+
+	systemTab := container.NewTabItem(config.T("memory_tab"), container.NewBorder(
+		createVSpacer(12), nil, nil, nil,
+		container.NewPadded(container.NewVScroll(container.New(
+			&DynamicGridLayout{MaxCols: 2, MinColWidth: 320},
+			memCard,
+			srvCard,
+		))),
+	))
+
+	netDescLabel := widget.NewLabel(config.T("net_shield"))
 	netDescLabel.Alignment = fyne.TextAlignCenter
 	netDescLabel.TextStyle = fyne.TextStyle{Italic: true}
 
@@ -337,16 +526,27 @@ func ShowDashboard() {
 		netDescLabel,
 	))
 
-	networkTab := container.NewTabItem("Network Optimization", networkScroll)
-
-	kernelTab := container.NewTabItem("Kernel & GPU Tuner", container.NewVBox(
-		kernelCard,
+	networkTab := container.NewTabItem(config.T("network_tab"), container.NewBorder(
+		createVSpacer(12), nil, nil, nil,
+		container.NewPadded(networkScroll),
 	))
 
-	tabs := container.NewAppTabs(boosterTab, systemTab, networkTab, kernelTab)
+	kernelTab := container.NewTabItem(config.T("kernel_tab"), container.NewBorder(
+		createVSpacer(12), nil, nil, nil,
+		container.NewPadded(container.NewVBox(
+			kernelCard,
+		)),
+	))
+
+	settingsTab := container.NewTabItem(config.T("settings_tab"), container.NewBorder(
+		createVSpacer(12), nil, nil, nil,
+		container.NewPadded(settingsScroll),
+	))
+
+	tabs := container.NewAppTabs(boosterTab, systemTab, networkTab, kernelTab, settingsTab)
 	tabs.SetTabLocation(container.TabLocationTop)
 
-	// 5. BOTTOM ROW: ENHANCED LOG FEED MATRIX TRACKER
+	// Log Matrix Stream Card
 	consoleFeed := widget.NewMultiLineEntry()
 	consoleFeed.SetText("NosBoost Console Initialized. Awaiting command matrix input...\n")
 	consoleFeed.Disable()
@@ -354,33 +554,141 @@ func ShowDashboard() {
 	consoleFeed.TextStyle = fyne.TextStyle{Monospace: true}
 
 	consoleContainer := container.NewGridWithRows(1, consoleFeed)
-	consoleCard := widget.NewCard("SYSTEM OPTIMIZATION LOG STREAM", "", consoleContainer)
+	consoleCard := widget.NewCard(config.T("console_log_title"), "", container.NewThemeOverride(consoleContainer, theme.DarkTheme()))
 
-	// Combine components into final layout with premium VSplit (Split Pane) and border layout
+	// Dynamic Language Switching Closure
+	refreshUIStrings = func() {
+		if isRefreshingStrings {
+			return
+		}
+		isRefreshingStrings = true
+		defer func() { isRefreshingStrings = false }()
+
+		titleLabel.Text = config.T("app_title")
+		titleLabel.Color = theme.PrimaryColor()
+		subtitleLabel.Text = config.T("subtitle")
+		subtitleLabel.Color = theme.ForegroundColor()
+
+		memCard.Title = config.T("ram_health")
+		cleanMemBtn.SetText(config.T("clean_mem"))
+
+		netDetailsCard.Title = config.T("net_shield")
+		flushNetworkBtn.SetText(config.T("flush_dns"))
+
+		kernelCard.Title = config.T("kernel_card")
+		srvCard.Title = config.T("srv_ledger")
+		deepVerifierBtn.SetText(config.T("verify_srv"))
+
+		hudCard.Title = config.T("hud_title")
+		blueprintBtn.SetText(config.T("blueprint"))
+
+		extremeCard.Title = config.T("extreme_title")
+		extremeFeatures.SetText(config.T("extreme_desc"))
+		extremeCardBtn.SetText(config.T("extreme_btn"))
+
+		balancedCard.Title = config.T("balanced_title")
+		balancedFeatures.SetText(config.T("balanced_desc"))
+		balancedCardBtn.SetText(config.T("balanced_btn"))
+
+		restoreCard.Title = config.T("restore_title")
+		restoreDescLabel.SetText(config.T("restore_desc"))
+		restoreCardBtn.SetText(config.T("restore_btn"))
+
+		themeLabel.SetText(config.T("theme_label"))
+		langLabel.SetText(config.T("lang_label"))
+		settingsCustomCard.Title = config.T("settings_custom")
+		settingsPerfCard.Title = config.T("settings_perf")
+		dwmCheck.SetText(config.T("dwm_label"))
+		dwmDescLabel.SetText(config.T("dwm_desc"))
+		searchCheck.SetText(config.T("search_label"))
+		searchDescLabel.SetText(config.T("search_desc"))
+		hiberCheck.SetText(config.T("hiber_label"))
+		hiberDescLabel.SetText(config.T("hiber_desc"))
+
+		boosterTab.Text = config.T("booster_tab")
+		systemTab.Text = config.T("memory_tab")
+		networkTab.Text = config.T("network_tab")
+		kernelTab.Text = config.T("kernel_tab")
+		settingsTab.Text = config.T("settings_tab")
+
+		consoleCard.Title = config.T("console_log_title")
+
+		// Translate theme selection dropdown options and restore the active selection index
+		themeIndex := 0
+		for i, opt := range themeSelect.Options {
+			if opt == themeSelect.Selected {
+				themeIndex = i
+				break
+			}
+		}
+		themeSelect.Options = []string{config.T("theme_dark"), config.T("theme_light")}
+		themeSelect.SetSelected(themeSelect.Options[themeIndex])
+
+		// Explicitly refresh all card titles and components
+		memCard.Refresh()
+		netDetailsCard.Refresh()
+		kernelCard.Refresh()
+		srvCard.Refresh()
+		hudCard.Refresh()
+		extremeCard.Refresh()
+		balancedCard.Refresh()
+		restoreCard.Refresh()
+		settingsCustomCard.Refresh()
+		settingsPerfCard.Refresh()
+		consoleCard.Refresh()
+
+		titleLabel.Refresh()
+		subtitleLabel.Refresh()
+		tabs.Refresh()
+		myWindow.Content().Refresh()
+	}
+
+	// Dynamic language select action trigger
+	langSelect.OnChanged = func(selected string) {
+		code, exists := langNameToCode[selected]
+		if !exists {
+			code = "en"
+		}
+		config.SetLanguage(code)
+		if code == "en" {
+			logToUI("[UI] Language switched to English.")
+		} else {
+			logToUI(fmt.Sprintf("[UI] Dil %s olarak değiştirildi.", selected))
+		}
+		refreshUIStrings()
+	}
+
+	// Set initial language selection matching config
+	initialLangCode := config.GetLanguage()
+	if name, exists := langCodeToName[initialLangCode]; exists {
+		langSelect.SetSelected(name)
+	} else {
+		langSelect.SetSelected(langCodeToName["en"])
+	}
+
+	// Final Layout
 	bodySplit := container.NewVSplit(
 		tabs,
 		consoleCard,
 	)
-	bodySplit.Offset = 0.68 // 68% height for the tabs, 32% for logs
+	bodySplit.Offset = 0.68
 
 	mainLayout := container.NewBorder(
-		headerContainer, // Top
-		nil,             // Bottom
-		nil,             // Left
-		nil,             // Right
-		bodySplit,       // Center
+		headerContainer,
+		nil,
+		nil,
+		nil,
+		bodySplit,
 	)
 
 	myWindow.SetContent(mainLayout)
-	myWindow.Resize(fyne.NewSize(1000, 800))
+	myWindow.Resize(fyne.NewSize(850, 650))
 
-	// 6. ASYNCHRONOUS BACKGROUND STATS UPDATES (Tickers)
-	// Consumes UIConsoleChan safely, prepending prefix scannability icons dynamically
+	// 9. ASYNCHRONOUS BACKGROUND STATS UPDATES (Tickers)
 	go func() {
 		for msg := range UIConsoleChan {
 			currentText := consoleFeed.Text
 
-			// Parse brackets prefix and prepend appropriate scannability icons
 			tag := "[INFO] "
 			if strings.Contains(msg, "[SYSTEM]") {
 				tag = "[SYS]  "
@@ -428,7 +736,6 @@ func ShowDashboard() {
 				tag = "[BLUE] "
 			}
 
-			// Remove bracket tags to clean log feed readability
 			cleanMsg := msg
 			cleanMsg = strings.ReplaceAll(cleanMsg, "[SYSTEM] ", "")
 			cleanMsg = strings.ReplaceAll(cleanMsg, "[CLEANER] ", "")
@@ -448,7 +755,6 @@ func ShowDashboard() {
 
 			newText := currentText + tag + cleanMsg + "\n"
 
-			// Cap log size at 30k characters to prevent memory leaks
 			if len(newText) > 30000 {
 				newText = newText[15000:]
 			}
@@ -460,7 +766,6 @@ func ShowDashboard() {
 		}
 	}()
 
-	// Spawn Telemetry Tickers in isolated background goroutines
 	go runTelemetryTickers(
 		ramAllocLabel, memProgress,
 		cpuOptLabel, timerLabel, hagsLabel, gameModeLabel,
