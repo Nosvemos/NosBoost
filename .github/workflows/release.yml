@@ -1,0 +1,94 @@
+name: 🚀 Build and Release NosBoost Optimizer
+
+on:
+  push:
+    tags:
+      - 'v*' # Triggers on release tags like v1.2.0, v1.2.1-beta
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag to inject (e.g. v1.2.0)'
+        required: true
+        default: 'v1.2.0'
+
+jobs:
+  build-and-release:
+    name: 🛠️ Build and Release
+    runs-on: windows-latest
+    permissions:
+      contents: write # Crucial for creating releases and uploading assets
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🐹 Set up Go Environment
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21' # Safe Go version with excellent Fyne compatibility
+          cache: true
+
+      - name: ⚙️ Set up MinGW GCC Compiler (Required for CGO/Fyne)
+        uses: egor-tensin/setup-mingw@v2
+        with:
+          platform: x64
+          version: 12.2.0
+
+      - name: 🎨 Compile Windows Manifest & Multi-Res Icon
+        run: |
+          go run compile_resources.go
+        shell: powershell
+
+      - name: 🔨 Compile Production Executable
+        run: |
+          # Determine the release version dynamically
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+              $version = "${{ github.event.inputs.version }}"
+          } else {
+              $version = "${{ github.ref_name }}"
+          }
+          
+          Write-Host "Building NosBoost Optimizer version: $version"
+          
+          # Force CGO compilation active
+          $env:CGO_ENABLED = "1"
+          
+          # Build highly optimized, stripped, statically-linked standalone GUI executable
+          go build -ldflags="-s -w -H=windowsgui -extldflags '-static' -X 'nosboost/internal/config.AppVersion=$version'" -o NosBoostOptimizer.exe ./cmd/nosboost
+        shell: powershell
+
+      - name: 📦 Upload Artifacts to Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: NosBoostOptimizer-Binary
+          path: NosBoostOptimizer.exe
+          retention-days: 5
+
+      - name: 📢 Create GitHub Release and Upload Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.version || github.ref_name }}
+          name: NosBoost Optimizer ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.version || github.ref_name }}
+          draft: false
+          prerelease: false
+          files: |
+            NosBoostOptimizer.exe
+          body: |
+            ## 🚀 NosBoost Optimizer — Release Notes
+            
+            Welcome to the new release of **NosBoost Optimizer**, the premium eSports gaming performance suite for Windows!
+            
+            ### ✨ What's New in this Version:
+            - **eSports Jitter Shield**: Fully suppresses network ping spikes, packet coalescing stutters, and interrupt delays on high-performance adapters.
+            - **TCP Delayed ACK disabling**: Instantly acknowledges game network packets (`TcpDelAckTicks = 0`) to eliminate delayed ack ping spikes.
+            - **Windows MMCSS (Multimedia Class Scheduler Service) Tuning**: Forces high CPU/GPU priority scheduling for active games.
+            - **Lock Kernel & Drivers in RAM (Paging Executive)**: Prevents OS caching modules from swapping to disk, minimizing stutters.
+            - **Native Multi-Resolution Icon Integration**: Full 6-layer high-fidelity `.ico` branding showing up flawlessly across Windows Explorer.
+            
+            ---
+            
+            ### 🛠️ Execution Requirements
+            - **Run as Administrator**: Because NosBoost performs low-level network, system kernel, and power management modifications, you **must right-click and run as Administrator** (automatic elevation prompt is embedded!).
+            - **Zero-Failure Rollback**: Captured a clean copy of your baseline settings in `state_backup.json` upon startup. Click "Total Restore" to reversibly revert changes at any time.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
