@@ -106,7 +106,15 @@ func ShowDashboard() {
 	os.Setenv("FYNE_THEME", "dark")
 
 	myApp := app.New()
+	if len(appIconPNG) > 0 {
+		iconRes := fyne.NewStaticResource("appicon.png", appIconPNG)
+		myApp.SetIcon(iconRes)
+	}
 	myWindow := myApp.NewWindow("NosBoost | Performance Optimizer")
+	if len(appIconPNG) > 0 {
+		iconRes := fyne.NewStaticResource("appicon.png", appIconPNG)
+		myWindow.SetIcon(iconRes)
+	}
 
 	var refreshUIStrings func()
 	var isRefreshingStrings bool
